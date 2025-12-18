@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}IB4 CRYPTO DECK{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    <div class="app-container">
+        <nav class="sidebar">
+            <div class="logo">
+                <h1>IB4 CRYPTO DECK</h1>
+            </div>
+            <ul class="nav-menu">
+                <li><a href="{{ url_for('dashboard') }}" class="{% if request.endpoint == 'dashboard' %}active{% endif %}">Dashboard</a></li>
+                <li><a href="{{ url_for('wallets') }}" class="{% if request.endpoint == 'wallets' %}active{% endif %}">Wallets</a></li>
+                <li><a href="{{ url_for('address_book') }}" class="{% if request.endpoint == 'address_book' %}active{% endif %}">Address Book</a></li>
+                <li><a href="{{ url_for('aml_check') }}" class="{% if request.endpoint == 'aml_check' %}active{% endif %}">AML Check</a></li>
+            </ul>
+        </nav>
+        <main class="main-content">
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+    {% block scripts %}{% endblock %}
+</body>
+</html>
+
+

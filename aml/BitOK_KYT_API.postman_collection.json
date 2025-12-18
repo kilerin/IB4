@@ -1,0 +1,736 @@
+{
+	"info": {
+		"_postman_id": "e65d264d-6bf9-4382-8980-f16df5caf057",
+		"name": "BitOK KYT API",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "34827835"
+	},
+	"item": [
+		{
+			"name": "Basics",
+			"item": [
+				{
+					"name": "List of Supported Network",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{host}}/v1/basics/networks/",
+							"host": [
+								"{{host}}"
+							],
+							"path": [
+								"v1",
+								"basics",
+								"networks",
+								""
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "List of Supported Tokens",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{host}}/v1/basics/tokens/",
+							"host": [
+								"{{host}}"
+							],
+							"path": [
+								"v1",
+								"basics",
+								"tokens",
+								""
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "List of Entity Categories",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{host}}/v1/basics/entity-categories/",
+							"host": [
+								"{{host}}"
+							],
+							"path": [
+								"v1",
+								"basics",
+								"entity-categories",
+								""
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Plan info",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{host}}/v1/basics/tariff-plan/",
+							"host": [
+								"{{host}}"
+							],
+							"path": [
+								"v1",
+								"basics",
+								"tariff-plan",
+								""
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Transfers",
+			"item": [
+				{
+					"name": "Retrieve transfers based on certain criteria",
+					"protocolProfileBehavior": {
+						"disabledSystemHeaders": {}
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{host}}/v1/transfers/",
+							"host": [
+								"{{host}}"
+							],
+							"path": [
+								"v1",
+								"transfers",
+								""
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Retrieve information about a specific transfer by its ID",
+					"protocolProfileBehavior": {
+						"disabledSystemHeaders": {}
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{host}}/v1/transfers/:id/",
+							"host": [
+								"{{host}}"
+							],
+							"path": [
+								"v1",
+								"transfers",
+								":id",
+								""
+							],
+							"variable": [
+								{
+									"key": "id",
+									"value": ""
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Register a transfer attempt",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"client_id\": \"id0001\",\n    \"attempt_id\": \"0a805206bab649a68b3408032a7352e6\",\n    \"direction\": \"outgoing\",\n    \"network\": \"ETH\",\n    \"output_address\": \"0x56eddb7aa87536c09ccc2793473599fd21a8b17f\",\n    \"amount\": 120.5\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{host}}/v1/transfers/register-attempt/",
+							"host": [
+								"{{host}}"
+							],
+							"path": [
+								"v1",
+								"transfers",
+								"register-attempt",
+								""
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Register a full transfer",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"client_id\": \"id0001\",\n  \"direction\": \"incoming\",\n  \"network\": \"ETH\",\n  \"tx_hash\": \"0x46bf4313a1f7f22cf97859d119c609fedad81541330de661f967795cc4f46e89\",\n  \"token_id\": \"0xdac17f958d2ee523a2206206994597c13d831ec7\",\n  \"output_address\": \"0x98Cb5718876AaB18e3A8429a18Ad543f6369A6f3\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{host}}/v1/transfers/register/",
+							"host": [
+								"{{host}}"
+							],
+							"path": [
+								"v1",
+								"transfers",
+								"register",
+								""
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Bind a transaction to a transfer",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"tx_hash\": \"0xc9ebe3254e683705c2553e268b915bf310995bf7540285146901b17fc3b437e6\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{host}}/v1/transfers/:id/bind-transaction/",
+							"host": [
+								"{{host}}"
+							],
+							"path": [
+								"v1",
+								"transfers",
+								":id",
+								"bind-transaction",
+								""
+							],
+							"variable": [
+								{
+									"key": "id",
+									"value": ""
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get an exposure of a transfer",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{host}}/v1/transfers/:id/exposure/",
+							"host": [
+								"{{host}}"
+							],
+							"path": [
+								"v1",
+								"transfers",
+								":id",
+								"exposure",
+								""
+							],
+							"variable": [
+								{
+									"key": "id",
+									"value": ""
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Recheck an exposure of a transfer",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{host}}/v1/transfers/:id/recheck-exposure/",
+							"host": [
+								"{{host}}"
+							],
+							"path": [
+								"v1",
+								"transfers",
+								":id",
+								"recheck-exposure",
+								""
+							],
+							"variable": [
+								{
+									"key": "id",
+									"value": ""
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get information about the counterparty info of a transfer",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{host}}/v1/transfers/:id/counterparty/",
+							"host": [
+								"{{host}}"
+							],
+							"path": [
+								"v1",
+								"transfers",
+								":id",
+								"counterparty",
+								""
+							],
+							"variable": [
+								{
+									"key": "id",
+									"value": ""
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Recheck the counterparty of a transfer",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{host}}/v1/transfers/:id/recheck-counterparty/",
+							"host": [
+								"{{host}}"
+							],
+							"path": [
+								"v1",
+								"transfers",
+								":id",
+								"recheck-counterparty",
+								""
+							],
+							"variable": [
+								{
+									"key": "id",
+									"value": ""
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get all risks of the transfer",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{host}}/v1/transfers/:id/risks/",
+							"host": [
+								"{{host}}"
+							],
+							"path": [
+								"v1",
+								"transfers",
+								":id",
+								"risks",
+								""
+							],
+							"variable": [
+								{
+									"key": "id",
+									"value": ""
+								}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Alerts",
+			"item": [
+				{
+					"name": "Retrieve alerts based on certain criteria",
+					"protocolProfileBehavior": {
+						"disabledSystemHeaders": {}
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{host}}/v1/alerts/",
+							"host": [
+								"{{host}}"
+							],
+							"path": [
+								"v1",
+								"alerts",
+								""
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Retrieve information about a specific alert by its ID",
+					"protocolProfileBehavior": {
+						"disabledSystemHeaders": {
+							"user-agent": true,
+							"accept": true,
+							"accept-encoding": true,
+							"connection": true,
+							"host": true
+						}
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{host}}/v1/alerts/:id/",
+							"host": [
+								"{{host}}"
+							],
+							"path": [
+								"v1",
+								"alerts",
+								":id",
+								""
+							],
+							"variable": [
+								{
+									"key": "id",
+									"value": "e3ddacc2-f84c-4ee4-ae1b-b64a37fa37f9"
+								}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Manual checks",
+			"item": [
+				{
+					"name": "Retrieve all manual checks",
+					"protocolProfileBehavior": {
+						"disabledSystemHeaders": {}
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{host}}/v1/manual-checks/",
+							"host": [
+								"{{host}}"
+							],
+							"path": [
+								"v1",
+								"manual-checks",
+								""
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Create manual transfer check",
+					"protocolProfileBehavior": {
+						"disabledSystemHeaders": {}
+					},
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"network\": \"ETH\",\n  \"token_id\": \"native\",\n  \"tx_hash\": \"0xd74f7e2a5081eb82c1d0a4fbd1859f23bed5fab8280f0aaf9e987019acc973a1\",\n  \"output_address\": \"0x2A6Ced4B10769147824A36e3D646eDA222E50f2A\",\n  \"direction\": \"incoming\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{host}}/v1/manual-checks/check-transfer/",
+							"host": [
+								"{{host}}"
+							],
+							"path": [
+								"v1",
+								"manual-checks",
+								"check-transfer",
+								""
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Create manual address check",
+					"protocolProfileBehavior": {
+						"disabledSystemHeaders": {}
+					},
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"network\": \"ETH\",\n  \"token_id\": \"0xdac17f958d2ee523a2206206994597c13d831ec7\",\n  \"address\": \"0x98f79674D5F2f777d44e253BfAf905D7491E8cEF\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{host}}/v1/manual-checks/check-address/",
+							"host": [
+								"{{host}}"
+							],
+							"path": [
+								"v1",
+								"manual-checks",
+								"check-address",
+								""
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Retrieve manual check details",
+					"protocolProfileBehavior": {
+						"disabledSystemHeaders": {}
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{host}}/v1/manual-checks/:id/",
+							"host": [
+								"{{host}}"
+							],
+							"path": [
+								"v1",
+								"manual-checks",
+								":id",
+								""
+							],
+							"variable": [
+								{
+									"key": "id",
+									"value": ""
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Retrieve risks of a manual check",
+					"protocolProfileBehavior": {
+						"disabledSystemHeaders": {}
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{host}}/v1/manual-checks/:id/risks/",
+							"host": [
+								"{{host}}"
+							],
+							"path": [
+								"v1",
+								"manual-checks",
+								":id",
+								"risks",
+								""
+							],
+							"variable": [
+								{
+									"key": "id",
+									"value": ""
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Retrieve a transfer exposure of the transfer being checked",
+					"protocolProfileBehavior": {
+						"disabledSystemHeaders": {}
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{host}}/v1/manual-checks/:id/transfer-exposure/",
+							"host": [
+								"{{host}}"
+							],
+							"path": [
+								"v1",
+								"manual-checks",
+								":id",
+								"transfer-exposure",
+								""
+							],
+							"variable": [
+								{
+									"key": "id",
+									"value": ""
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Retrieve an address exposure of the address being checked",
+					"protocolProfileBehavior": {
+						"disabledSystemHeaders": {}
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{host}}/v1/manual-checks/:id/address-exposure/",
+							"host": [
+								"{{host}}"
+							],
+							"path": [
+								"v1",
+								"manual-checks",
+								":id",
+								"address-exposure",
+								""
+							],
+							"variable": [
+								{
+									"key": "id",
+									"value": ""
+								}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"packages": {
+					"npm:crypto-js@4.2.0": {
+						"id": "npm:crypto-js@4.2.0"
+					}
+				},
+				"exec": [
+					"const CryptoJS = require('crypto-js');",
+					"const ts = Date.now().toString();",
+					"const api_key_id = pm.environment.get(\"API_KEY_ID\");",
+					"const api_secret = pm.environment.get(\"API_KEY_SECRET\");",
+					"",
+					"pm.request.headers.add({",
+					"    key: \"API-TIMESTAMP\",",
+					"    value: ts",
+					"});",
+					"",
+					"pm.request.headers.add({",
+					"    key: \"API-KEY-ID\",",
+					"    value: api_key_id",
+					"});",
+					"",
+					"let paramsObject = {};",
+					"",
+					"let str_to_sign = ",
+					"        pm.request.method + \"\\n\" +",
+					"        pm.request.url.getPathWithQuery() + \"\\n\" +",
+					"        ts;",
+					"",
+					"let body_row = pm.request.body.raw",
+					"",
+					"if (pm.request.method == \"POST\" && body_row !== undefined) {",
+					"    str_to_sign += \"\\n\" +",
+					"        JSON.stringify(JSON.parse(body_row));",
+					"    ",
+					"}",
+					"",
+					"console.log(str_to_sign);",
+					"",
+					"var signature = CryptoJS.HmacSHA256(str_to_sign, api_secret).toString(CryptoJS.enc.Base64);",
+					"        ",
+					"Object.assign(paramsObject, {'timestamp': ts});",
+					"console.log(signature);",
+					"",
+					"if (signature) {",
+					"",
+					"    pm.request.headers.add({",
+					"        key: \"API-SIGNATURE\",",
+					"        value: signature",
+					"    });",
+					"}"
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"packages": {},
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "host",
+			"value": "https://kyt-api.bitok.org"
+		}
+	]
+}
