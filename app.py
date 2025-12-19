@@ -1,8 +1,11 @@
 from flask import Flask, render_template, jsonify, request
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import func
 from datetime import datetime
 import os
 import requests
+import threading
+import time
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///crypto_deck.db'
@@ -18,8 +21,12 @@ class Wallet(db.Model):
     balance_trx = db.Column(db.Float, default=0.0)
     aml_status = db.Column(db.String(50), default='pending')
     aml_checked_at = db.Column(db.DateTime, nullable=True)
+    aml_score = db.Column(db.Float, nullable=True)  # Процент риска (0.0-100.0)
+    aml_risk_level = db.Column(db.String(20), nullable=True)  # low, medium, high
+    aml_checking = db.Column(db.Boolean, default=False)  # Флаг проверки в процессе
     is_hidden = db.Column(db.Boolean, default=False)
     sort_order = db.Column(db.Integer, default=0)
+    color = db.Column(db.String(20), default='gray')  # red, blue, purple, gray, green, orange, yellow
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 class Transaction(db.Model):
@@ -37,6 +44,23 @@ class Transaction(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     wallet = db.relationship('Wallet', backref=db.backref('transactions', lazy=True, cascade='all, delete-orphan'))
+
+class Reserve(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    amount = db.Column(db.Float, nullable=False)
+    comment = db.Column(db.String(200), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class AddressBook(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    customer = db.Column(db.String(200), nullable=False)
+    address = db.Column(db.String(200), nullable=False)
+    aml_status = db.Column(db.String(50), default='pending')
+    manager = db.Column(db.String(100), nullable=True)
+    date_added = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 # Routes
 @app.route('/')
@@ -76,8 +100,12 @@ def get_wallets():
                     'balance_trx': wallet.balance_trx,
                     'aml_status': wallet.aml_status,
                     'aml_checked_at': wallet.aml_checked_at.isoformat() if wallet.aml_checked_at else None,
+                    'aml_score': wallet.aml_score,
+                    'aml_risk_level': wallet.aml_risk_level,
+                    'aml_checking': wallet.aml_checking,
                     'is_hidden': wallet.is_hidden,
-                    'sort_order': wallet.sort_order
+                    'sort_order': wallet.sort_order,
+                    'color': wallet.color or 'gray'
                 }],
                 'total_usdt': sum(w.balance_usdt for w in Wallet.query.filter_by(is_hidden=False).all()),
                 'total_trx': sum(w.balance_trx for w in Wallet.query.filter_by(is_hidden=False).all())
@@ -101,8 +129,12 @@ def get_wallets():
             'balance_trx': w.balance_trx,
             'aml_status': w.aml_status,
             'aml_checked_at': w.aml_checked_at.isoformat() if w.aml_checked_at else None,
+            'aml_score': w.aml_score,
+            'aml_risk_level': w.aml_risk_level,
+            'aml_checking': w.aml_checking or False,
             'is_hidden': w.is_hidden,
-            'sort_order': w.sort_order
+            'sort_order': w.sort_order,
+            'color': w.color or 'gray'
         } for w in wallets],
         'total_usdt': total_usdt,
         'total_trx': total_trx
@@ -113,6 +145,12 @@ def add_wallet():
     data = request.json
     name = data.get('name')
     address = data.get('address')
+    color = data.get('color', 'gray')
+    
+    # Validate color
+    valid_colors = ['red', 'blue', 'purple', 'gray', 'green', 'orange', 'yellow']
+    if color not in valid_colors:
+        color = 'gray'
     
     if not name or not address:
         return jsonify({'error': 'Name and address are required'}), 400
@@ -136,6 +174,7 @@ def add_wallet():
     wallet = Wallet(
         name=name,
         address=address,
+        color=color,
         sort_order=max_order + 1
     )
     db.session.add(wallet)
@@ -147,6 +186,7 @@ def add_wallet():
         'address': wallet.address,
         'balance_usdt': wallet.balance_usdt,
         'balance_trx': wallet.balance_trx,
+        'color': wallet.color,
         'aml_status': wallet.aml_status,
         'aml_checked_at': wallet.aml_checked_at.isoformat() if wallet.aml_checked_at else None,
         'is_hidden': wallet.is_hidden,
@@ -162,6 +202,13 @@ def update_wallet(wallet_id):
         wallet.name = data['name']
     if 'is_hidden' in data:
         wallet.is_hidden = data['is_hidden']
+    if 'color' in data:
+        valid_colors = ['red', 'blue', 'purple', 'gray', 'green', 'orange', 'yellow']
+        color = data['color']
+        if color in valid_colors:
+            wallet.color = color
+        else:
+            wallet.color = 'gray'
     
     db.session.commit()
     return jsonify({'success': True})
@@ -342,14 +389,177 @@ def refresh_balances():
         'updated': updated_count
     })
 
+def build_bitok_signature(http_method, endpoint, timestamp, json_payload=None, api_secret=None):
+    """Build HMAC-SHA256 signature for BitOK API"""
+    import hmac
+    import hashlib
+    import base64
+    import json
+    
+    if api_secret is None:
+        api_secret = 'dO69KPVW9qOH03Of5c3To3cgmF9RClSp9xf013IG8HVPMr68WTvBUoVFtLcnKrZq'
+    
+    str_to_sign = f"{http_method}\n{endpoint}\n{timestamp}"
+    
+    if json_payload:
+        str_to_sign += f"\n{json.dumps(json_payload, separators=(',', ':'))}"
+    
+    built_signature = hmac.new(
+        api_secret.encode('utf-8'),
+        msg=str_to_sign.encode('utf-8'),
+        digestmod=hashlib.sha256
+    ).digest()
+    
+    signature = base64.b64encode(built_signature).decode()
+    return signature
+
+def perform_aml_check_async(wallet_id):
+    """Выполняет AML проверку в фоновом потоке"""
+    with app.app_context():
+        wallet = Wallet.query.get(wallet_id)
+        if not wallet:
+            return
+        
+        try:
+            # BitOK API credentials
+            API_KEY_ID = 'hvvunrOUKjEzlkMz4JiFUPPD5Je7E8qK'
+            API_SECRET = 'dO69KPVW9qOH03Of5c3To3cgmF9RClSp9xf013IG8HVPMr68WTvBUoVFtLcnKrZq'
+            API_BASE_URL = 'https://kyt-api.bitok.org'
+            
+            # Создаем запрос на проверку адреса
+            timestamp = str(int(time.time() * 1000))
+            endpoint = '/v1/manual-checks/check-address/'
+            
+            payload = {
+                'network': 'TRX',
+                'address': wallet.address
+            }
+            
+            signature = build_bitok_signature('POST', endpoint, timestamp, payload, API_SECRET)
+            
+            headers = {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'API-KEY-ID': API_KEY_ID,
+                'API-TIMESTAMP': timestamp,
+                'API-SIGNATURE': signature
+            }
+            
+            # Отправляем запрос на проверку
+            response = requests.post(
+                f'{API_BASE_URL}{endpoint}',
+                headers=headers,
+                json=payload,
+                timeout=10
+            )
+            
+            if response.status_code != 200:
+                raise Exception(f"BitOK API error: {response.status_code} - {response.text}")
+            
+            check_data = response.json()
+            check_id = check_data.get('id')
+            
+            if not check_id:
+                raise Exception("No check ID returned from BitOK API")
+            
+            # Опрашиваем статус проверки (максимум 60 секунд = 1 минута)
+            max_attempts = 60
+            attempt = 0
+            
+            while attempt < max_attempts:
+                time.sleep(1)  # Ждем 1 секунду между запросами
+                
+                timestamp = str(int(time.time() * 1000))
+                endpoint = f'/v1/manual-checks/{check_id}/'
+                signature = build_bitok_signature('GET', endpoint, timestamp, None, API_SECRET)
+                
+                headers = {
+                    'Accept': 'application/json',
+                    'API-KEY-ID': API_KEY_ID,
+                    'API-TIMESTAMP': timestamp,
+                    'API-SIGNATURE': signature
+                }
+                
+                status_response = requests.get(
+                    f'{API_BASE_URL}{endpoint}',
+                    headers=headers,
+                    timeout=10
+                )
+                
+                if status_response.status_code == 200:
+                    status_data = status_response.json()
+                    check_status = status_data.get('check_status')
+                    
+                    if check_status == 'checked':
+                        risk_level = status_data.get('risk_level', 'undefined')
+                        risk_score = status_data.get('risk_score')
+                        
+                        # Конвертируем risk_score (0.0-1.0) в процент (0.0-100.0)
+                        if risk_score is not None:
+                            aml_score = round(risk_score * 100, 1)
+                        else:
+                            # Если нет risk_score, определяем по risk_level
+                            if risk_level == 'low':
+                                aml_score = 20
+                            elif risk_level == 'medium':
+                                aml_score = 50
+                            elif risk_level == 'high':
+                                aml_score = 80
+                            elif risk_level == 'severe':
+                                aml_score = 100
+                            else:
+                                aml_score = 0
+                        
+                        # Обновляем результат проверки
+                        wallet.aml_checking = False
+                        wallet.aml_status = 'checked'
+                        wallet.aml_checked_at = datetime.utcnow()
+                        wallet.aml_score = aml_score
+                        wallet.aml_risk_level = risk_level
+                        db.session.commit()
+                        return
+                    elif check_status == 'error':
+                        raise Exception("BitOK API check failed with error status")
+                
+                attempt += 1
+            
+            # Если проверка не завершилась за отведенное время
+            raise Exception("AML check timeout - check is still in progress")
+            
+        except Exception as e:
+            # В случае ошибки сбрасываем флаг проверки
+            wallet.aml_checking = False
+            wallet.aml_status = 'error'
+            db.session.commit()
+            print(f"AML check error for wallet {wallet_id}: {str(e)}")
+
 @app.route('/api/wallets/<int:wallet_id>/aml-check', methods=['POST'])
 def check_aml(wallet_id):
     wallet = Wallet.query.get_or_404(wallet_id)
-    # TODO: Implement actual AML check using BitOK API
-    wallet.aml_status = 'checked'
-    wallet.aml_checked_at = datetime.utcnow()
+    
+    # Проверяем, не идет ли уже проверка
+    if wallet.aml_checking:
+        return jsonify({
+            'success': False,
+            'error': 'AML check is already in progress'
+        }), 400
+    
+    # Устанавливаем флаг проверки в процессе
+    wallet.aml_checking = True
+    wallet.aml_status = 'checking'
     db.session.commit()
-    return jsonify({'success': True, 'aml_status': wallet.aml_status})
+    
+    # Запускаем проверку в фоновом потоке
+    thread = threading.Thread(target=perform_aml_check_async, args=(wallet_id,))
+    thread.daemon = True
+    thread.start()
+    
+    return jsonify({
+        'success': True,
+        'message': 'AML check started',
+        'aml_status': 'checking',
+        'aml_checking': True
+    })
 
 @app.route('/api/transactions', methods=['GET'])
 def get_transactions():
@@ -388,6 +598,32 @@ def get_transactions():
             'created_at': t.created_at.isoformat()
         } for t in transactions]
     })
+
+def get_counterparty_name(address):
+    """Get customer name from address book if address exists"""
+    if not address:
+        return None
+    # Strip whitespace for comparison
+    address_clean = address.strip()
+    
+    # Try exact match first
+    entry = AddressBook.query.filter_by(address=address_clean).first()
+    if entry:
+        print(f"Found address book entry (exact match) for '{address_clean}': {entry.customer}")
+        return entry.customer
+    
+    # Try case-insensitive match (in case addresses are stored differently)
+    all_entries = AddressBook.query.all()
+    for entry in all_entries:
+        if entry.address.strip().lower() == address_clean.lower():
+            print(f"Found address book entry (case-insensitive) for '{address_clean}': {entry.customer} (stored as: '{entry.address}')")
+            return entry.customer
+    
+    print(f"No address book entry found for '{address_clean}'")
+    # Debug: show all addresses in address book for comparison
+    all_addresses = [e.address.strip() for e in AddressBook.query.all()]
+    print(f"Available addresses in address book: {all_addresses[:5]}...")  # Show first 5
+    return None
 
 @app.route('/api/transactions/refresh', methods=['POST'])
 def refresh_transactions():
@@ -519,6 +755,17 @@ def refresh_transactions():
                                     transaction_type = direction
                                     display_amount = amount
                                 
+                                # Get counterparty name from address book
+                                # For incoming: counterparty is from_address (who sent)
+                                # For outgoing: counterparty is to_address (who received)
+                                counterparty_address = from_addr if direction == 'incoming' else to_addr
+                                if counterparty_address:
+                                    counterparty_name = get_counterparty_name(counterparty_address)
+                                    if counterparty_name:
+                                        print(f"Found counterparty: {counterparty_name} for address: {counterparty_address}")
+                                else:
+                                    counterparty_name = None
+                                
                                 transaction = Transaction(
                                     wallet_id=wallet.id,
                                     currency='USDT',
@@ -527,6 +774,7 @@ def refresh_transactions():
                                     type=transaction_type,
                                     from_address=from_addr if from_addr else None,
                                     to_address=to_addr if to_addr else None,
+                                    counterparty_name=counterparty_name,
                                     tx_hash=tx_hash,
                                     created_at=tx_datetime
                                 )
@@ -614,6 +862,7 @@ def refresh_transactions():
                                             type=transaction_type,  # incoming или outgoing
                                             from_address=from_addr if from_addr else None,
                                             to_address=to_addr if to_addr else None,
+                                            counterparty_name=None,  # TRX transactions don't use address book
                                             tx_hash=tx_hash,
                                             created_at=tx_datetime
                                         )
@@ -799,17 +1048,279 @@ def refresh_transactions():
             errors.append(f"Error processing {wallet.name}: {str(e)}")
             continue
     
+    # Update counterparty names for existing USDT transactions that don't have one yet
+    print("\n=== UPDATING EXISTING TRANSACTIONS WITH ADDRESS BOOK ===")
+    updated_count = 0
+    existing_usdt_txs = Transaction.query.filter_by(currency='USDT').filter(
+        (Transaction.counterparty_name == None) | (Transaction.counterparty_name == '')
+    ).all()
+    
+    for tx in existing_usdt_txs:
+        # For incoming: counterparty is from_address (who sent)
+        # For outgoing: counterparty is to_address (who received)
+        counterparty_address = tx.from_address if tx.direction == 'incoming' else tx.to_address
+        if counterparty_address:
+            counterparty_name = get_counterparty_name(counterparty_address)
+            if counterparty_name:
+                tx.counterparty_name = counterparty_name
+                updated_count += 1
+                print(f"Updated transaction {tx.id}: set counterparty_name={counterparty_name} for address={counterparty_address}")
+    
     db.session.commit()
     
     print(f"\n=== TRANSACTIONS REFRESH COMPLETE ===")
     print(f"Added {new_count} new transactions")
+    print(f"Updated {updated_count} existing transactions with address book entries")
     if errors:
         print(f"Errors: {errors}")
     
     return jsonify({
         'success': True,
         'new_transactions': new_count,
+        'updated_transactions': updated_count,
         'errors': errors if errors else None
+    })
+
+# Reserves API
+@app.route('/api/reserves', methods=['GET'])
+def get_reserves():
+    reserves = Reserve.query.order_by(Reserve.created_at.desc()).all()
+    return jsonify({
+        'reserves': [{
+            'id': r.id,
+            'amount': r.amount,
+            'comment': r.comment,
+            'created_at': r.created_at.isoformat(),
+            'updated_at': r.updated_at.isoformat()
+        } for r in reserves]
+    })
+
+@app.route('/api/reserves', methods=['POST'])
+def create_reserve():
+    data = request.json
+    amount = float(data.get('amount', 0))
+    comment = data.get('comment', '').strip()
+    
+    if amount <= 0:
+        return jsonify({'error': 'Amount must be greater than 0'}), 400
+    
+    reserve = Reserve(amount=amount, comment=comment)
+    db.session.add(reserve)
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'reserve': {
+            'id': reserve.id,
+            'amount': reserve.amount,
+            'comment': reserve.comment,
+            'created_at': reserve.created_at.isoformat(),
+            'updated_at': reserve.updated_at.isoformat()
+        }
+    })
+
+@app.route('/api/reserves/<int:reserve_id>', methods=['PUT'])
+def update_reserve(reserve_id):
+    reserve = Reserve.query.get_or_404(reserve_id)
+    data = request.json
+    amount = float(data.get('amount', reserve.amount))
+    comment = data.get('comment', reserve.comment).strip()
+    
+    if amount <= 0:
+        return jsonify({'error': 'Amount must be greater than 0'}), 400
+    
+    reserve.amount = amount
+    reserve.comment = comment
+    reserve.updated_at = datetime.utcnow()
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'reserve': {
+            'id': reserve.id,
+            'amount': reserve.amount,
+            'comment': reserve.comment,
+            'created_at': reserve.created_at.isoformat(),
+            'updated_at': reserve.updated_at.isoformat()
+        }
+    })
+
+@app.route('/api/reserves/<int:reserve_id>', methods=['DELETE'])
+def delete_reserve(reserve_id):
+    reserve = Reserve.query.get_or_404(reserve_id)
+    db.session.delete(reserve)
+    db.session.commit()
+    return jsonify({'success': True})
+
+@app.route('/api/reserves/total', methods=['GET'])
+def get_total_reserves():
+    total = db.session.query(func.sum(Reserve.amount)).scalar() or 0.0
+    return jsonify({'total': round(total, 2)})
+
+# Address Book API
+@app.route('/api/addressbook', methods=['GET'])
+def get_addressbook():
+    addresses = AddressBook.query.order_by(AddressBook.date_added.desc()).all()
+    return jsonify({
+        'addresses': [{
+            'id': a.id,
+            'customer': a.customer,
+            'address': a.address,
+            'aml_status': a.aml_status,
+            'manager': a.manager,
+            'date_added': a.date_added.isoformat() if a.date_added else None,
+            'created_at': a.created_at.isoformat(),
+            'updated_at': a.updated_at.isoformat()
+        } for a in addresses]
+    })
+
+@app.route('/api/addressbook', methods=['POST'])
+def create_addressbook_entry():
+    data = request.json
+    customer = data.get('customer', '').strip()
+    address = data.get('address', '').strip()
+    manager = data.get('manager', '').strip()
+    aml_status = data.get('aml_status', 'pending')
+    
+    if not customer or not address:
+        return jsonify({'error': 'Customer and Address are required'}), 400
+    
+    # Check if address already exists
+    existing_entry = AddressBook.query.filter_by(address=address).first()
+    if existing_entry:
+        return jsonify({
+            'error': 'Address already exists',
+            'existing': {
+                'customer': existing_entry.customer,
+                'address': existing_entry.address,
+                'manager': existing_entry.manager,
+                'date_added': existing_entry.date_added.isoformat() if existing_entry.date_added else None
+            }
+        }), 400
+    
+    entry = AddressBook(
+        customer=customer,
+        address=address,
+        manager=manager if manager else None,
+        aml_status=aml_status
+    )
+    db.session.add(entry)
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'address': {
+            'id': entry.id,
+            'customer': entry.customer,
+            'address': entry.address,
+            'aml_status': entry.aml_status,
+            'manager': entry.manager,
+            'date_added': entry.date_added.isoformat() if entry.date_added else None,
+            'created_at': entry.created_at.isoformat(),
+            'updated_at': entry.updated_at.isoformat()
+        }
+    })
+
+@app.route('/api/addressbook/<int:entry_id>', methods=['PUT'])
+def update_addressbook_entry(entry_id):
+    entry = AddressBook.query.get_or_404(entry_id)
+    data = request.json
+    customer = data.get('customer', entry.customer).strip()
+    address = data.get('address', entry.address).strip()
+    manager = data.get('manager', entry.manager).strip() if data.get('manager') else None
+    aml_status = data.get('aml_status', entry.aml_status)
+    
+    if not customer or not address:
+        return jsonify({'error': 'Customer and Address are required'}), 400
+    
+    # Check if address already exists (excluding current entry)
+    if address != entry.address:
+        existing_entry = AddressBook.query.filter_by(address=address).first()
+        if existing_entry:
+            return jsonify({
+                'error': 'Address already exists',
+                'existing': {
+                    'customer': existing_entry.customer,
+                    'address': existing_entry.address,
+                    'manager': existing_entry.manager,
+                    'date_added': existing_entry.date_added.isoformat() if existing_entry.date_added else None
+                }
+            }), 400
+    
+    entry.customer = customer
+    entry.address = address
+    entry.manager = manager
+    entry.aml_status = aml_status
+    entry.updated_at = datetime.utcnow()
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'address': {
+            'id': entry.id,
+            'customer': entry.customer,
+            'address': entry.address,
+            'aml_status': entry.aml_status,
+            'manager': entry.manager,
+            'date_added': entry.date_added.isoformat() if entry.date_added else None,
+            'created_at': entry.created_at.isoformat(),
+            'updated_at': entry.updated_at.isoformat()
+        }
+    })
+
+@app.route('/api/addressbook/<int:entry_id>', methods=['DELETE'])
+def delete_addressbook_entry(entry_id):
+    entry = AddressBook.query.get_or_404(entry_id)
+    db.session.delete(entry)
+    db.session.commit()
+    return jsonify({'success': True})
+
+@app.route('/api/transactions/update-counterparty', methods=['POST'])
+def update_transactions_counterparty():
+    """Update counterparty_name for all transactions with a given address"""
+    data = request.json
+    address = data.get('address', '').strip()
+    
+    if not address:
+        return jsonify({'error': 'Address is required'}), 400
+    
+    # Get customer name from address book
+    entry = AddressBook.query.filter_by(address=address).first()
+    if not entry:
+        return jsonify({'error': 'Address not found in address book'}), 404
+    
+    customer_name = entry.customer
+    
+    # Find all USDT transactions where this address is the counterparty
+    # For incoming: counterparty is from_address
+    # For outgoing: counterparty is to_address
+    incoming_txs = Transaction.query.filter_by(
+        currency='USDT',
+        direction='incoming',
+        from_address=address
+    ).all()
+    
+    outgoing_txs = Transaction.query.filter_by(
+        currency='USDT',
+        direction='outgoing',
+        to_address=address
+    ).all()
+    
+    all_txs = incoming_txs + outgoing_txs
+    
+    # Update counterparty_name for all matching transactions
+    updated_count = 0
+    for tx in all_txs:
+        if tx.counterparty_name != customer_name:
+            tx.counterparty_name = customer_name
+            updated_count += 1
+    
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'updated_count': updated_count,
+        'customer_name': customer_name
     })
 
 if __name__ == '__main__':

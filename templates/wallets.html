@@ -13,28 +13,39 @@
 <div class="wallets-layout">
     <!-- Wallets Panel (слева) -->
     <div class="card wallets-panel">
-        <div class="card-header">
-            <div class="controls">
-                <button class="btn btn-sm" onclick="openAddWalletModal()">+ Add Wallet</button>
-                <button class="btn-icon" onclick="refreshBalances()" title="Refresh Balances">
-                    <img src="/static/ico/refresh.svg" class="btn-icon-img" alt="Refresh">
-                </button>
-                <div class="toggle-switch">
-                    <input type="checkbox" id="showHidden" onchange="toggleHiddenWallets()">
-                    <label for="showHidden">Hidden</label>
-                </div>
-            </div>
-        </div>
-        
         <div class="stats">
             <div class="stat-card">
                 <div class="stat-label">Total USDT</div>
                 <div class="stat-value" id="totalUsdt">0.00</div>
             </div>
             <div class="stat-card">
-                <div class="stat-label">Total TRX</div>
-                <div class="stat-value" id="totalTrx">0.00</div>
+                <div class="stat-label">RESERVES</div>
+                <div class="stat-value" id="totalReserves">0.00</div>
             </div>
+            <div class="stat-card">
+                <div class="stat-label">AVAILABLE</div>
+                <div class="stat-value" id="availableUsdt">0.00</div>
+            </div>
+        </div>
+        
+        <div style="margin-bottom: 12px;">
+            <button class="btn-reserve" onclick="openReserveModal()">+ Reserves</button>
+        </div>
+        
+        <div id="reservesList" class="reserves-list">
+            <!-- Reserves will be loaded here -->
+        </div>
+        
+        <div class="reserves-separator"></div>
+        
+        <div class="wallet-controls">
+            <button class="btn btn-sm" onclick="openAddWalletModal()">+ Add Wallet</button>
+            <button class="btn-icon" onclick="refreshBalances()" title="Refresh Balances">
+                <img src="/static/ico/refresh.svg" class="btn-icon-img" alt="Refresh">
+            </button>
+            <button class="btn-icon" id="toggleHiddenBtn" onclick="toggleHiddenWallets()" title="Toggle Hidden Wallets">
+                <img src="/static/ico/eye.svg" id="toggleHiddenIcon" class="btn-icon-img" alt="Toggle Hidden">
+            </button>
         </div>
         
         <div id="walletList" class="wallet-list">
@@ -48,14 +59,15 @@
         <h2 class="card-title">Transactions</h2>
         <div class="controls">
             <div class="toggle-switch">
-                <input type="checkbox" id="hideSmall" onchange="loadTransactions()">
+                <input type="checkbox" id="hideSmall">
                 <label for="hideSmall">Hide &lt; 10 USDT</label>
             </div>
             <div class="toggle-switch">
-                <input type="checkbox" id="hideTrx" onchange="loadTransactions()">
+                <input type="checkbox" id="hideTrx">
                 <label for="hideTrx">Hide TRX</label>
             </div>
             <button class="btn btn-sm btn-secondary" onclick="refreshTransactions()">Refresh</button>
+            <button class="btn btn-sm btn-secondary" onclick="exportToExcel()">Export to Excel</button>
         </div>
     </div>
     
@@ -96,6 +108,25 @@
                 <label class="form-label">TRX Address</label>
                 <input type="text" class="form-input" id="walletAddress" placeholder="T..." required>
             </div>
+            <div class="form-group">
+                <label class="form-label">Color</label>
+                <div class="color-selector">
+                    <input type="radio" name="walletColor" id="colorGray" value="gray" checked>
+                    <label for="colorGray" class="color-option color-gray" title="Gray"></label>
+                    <input type="radio" name="walletColor" id="colorRed" value="red">
+                    <label for="colorRed" class="color-option color-red" title="Red"></label>
+                    <input type="radio" name="walletColor" id="colorBlue" value="blue">
+                    <label for="colorBlue" class="color-option color-blue" title="Blue"></label>
+                    <input type="radio" name="walletColor" id="colorPurple" value="purple">
+                    <label for="colorPurple" class="color-option color-purple" title="Purple"></label>
+                    <input type="radio" name="walletColor" id="colorGreen" value="green">
+                    <label for="colorGreen" class="color-option color-green" title="Green"></label>
+                    <input type="radio" name="walletColor" id="colorOrange" value="orange">
+                    <label for="colorOrange" class="color-option color-orange" title="Orange"></label>
+                    <input type="radio" name="walletColor" id="colorYellow" value="yellow">
+                    <label for="colorYellow" class="color-option color-yellow" title="Yellow"></label>
+                </div>
+            </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" onclick="closeAddWalletModal()">Cancel</button>
                 <button type="submit" class="btn">Add Wallet</button>
@@ -120,6 +151,25 @@
                 <div class="address-display">
                     <span id="walletDetailsAddress" class="address-full"></span>
                     <img src="/static/ico/copy.svg" class="copy-icon" onclick="copyToClipboard(document.getElementById('walletDetailsAddress').textContent)" title="Copy address" alt="Copy">
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Color</label>
+                <div class="color-selector">
+                    <input type="radio" name="walletDetailsColor" id="detailsColorGray" value="gray">
+                    <label for="detailsColorGray" class="color-option color-gray" title="Gray"></label>
+                    <input type="radio" name="walletDetailsColor" id="detailsColorRed" value="red">
+                    <label for="detailsColorRed" class="color-option color-red" title="Red"></label>
+                    <input type="radio" name="walletDetailsColor" id="detailsColorBlue" value="blue">
+                    <label for="detailsColorBlue" class="color-option color-blue" title="Blue"></label>
+                    <input type="radio" name="walletDetailsColor" id="detailsColorPurple" value="purple">
+                    <label for="detailsColorPurple" class="color-option color-purple" title="Purple"></label>
+                    <input type="radio" name="walletDetailsColor" id="detailsColorGreen" value="green">
+                    <label for="detailsColorGreen" class="color-option color-green" title="Green"></label>
+                    <input type="radio" name="walletDetailsColor" id="detailsColorOrange" value="orange">
+                    <label for="detailsColorOrange" class="color-option color-orange" title="Orange"></label>
+                    <input type="radio" name="walletDetailsColor" id="detailsColorYellow" value="yellow">
+                    <label for="detailsColorYellow" class="color-option color-yellow" title="Yellow"></label>
                 </div>
             </div>
             <div class="form-group">
@@ -149,9 +199,83 @@
         </div>
     </div>
 </div>
+
+<!-- Reserve Modal -->
+<div id="reserveModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2 id="reserveModalTitle">Add Reserve</h2>
+        </div>
+        <form id="reserveForm" onsubmit="saveReserve(event)">
+            <div class="form-group">
+                <label class="form-label">Amount</label>
+                <input type="number" class="form-input" id="reserveAmount" step="0.01" min="0.01" required>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Comment</label>
+                <input type="text" class="form-input" id="reserveComment" maxlength="200">
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeReserveModal()">Cancel</button>
+                <button type="submit" class="btn" id="reserveSubmitBtn">Add</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Add Address to Address Book Modal -->
+<div id="addAddressModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>Add to Address Book</h2>
+            <p class="text-muted">Add this address to your address book</p>
+        </div>
+        <form id="addAddressForm" onsubmit="saveAddressFromTransaction(event)">
+            <div class="form-group">
+                <label class="form-label">Customer Name</label>
+                <input type="text" class="form-input" id="addressBookCustomer" required>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Address</label>
+                <input type="text" class="form-input" id="addressBookAddress" readonly>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Manager</label>
+                <input type="text" class="form-input" id="addressBookManager">
+            </div>
+            <div class="form-group">
+                <label class="form-label">AML Status</label>
+                <select class="form-input" id="addressBookAmlStatus">
+                    <option value="pending">Pending</option>
+                    <option value="approved">Approved</option>
+                    <option value="rejected">Rejected</option>
+                </select>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeAddAddressModal()">Cancel</button>
+                <button type="submit" class="btn">Add</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- AML Check Confirmation Modal -->
+<div id="amlConfirmModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>Confirm AML Check</h2>
+            <p class="text-muted">Are you sure you want to perform AML check for this wallet?</p>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" onclick="closeAmlConfirmModal()">Cancel</button>
+            <button type="button" class="btn" id="confirmAmlCheckBtn">OK</button>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
 <script src="{{ url_for('static', filename='js/wallets.js') }}"></script>
 {% endblock %}
