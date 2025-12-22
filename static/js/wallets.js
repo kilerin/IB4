@@ -5,15 +5,20 @@ document.addEventListener('DOMContentLoaded', function() {
     // Restore toggle states from localStorage
     const hideSmall = localStorage.getItem('hideSmallTransactions') === 'true';
     const hideTrx = localStorage.getItem('hideTrxTransactions') === 'true';
+    const hideOwnFundTransfer = localStorage.getItem('hideOwnFundTransfer') === 'true';
     
     const hideSmallCheckbox = document.getElementById('hideSmall');
     const hideTrxCheckbox = document.getElementById('hideTrx');
+    const hideOwnFundTransferCheckbox = document.getElementById('hideOwnFundTransfer');
     
     if (hideSmallCheckbox) {
         hideSmallCheckbox.checked = hideSmall;
     }
     if (hideTrxCheckbox) {
         hideTrxCheckbox.checked = hideTrx;
+    }
+    if (hideOwnFundTransferCheckbox) {
+        hideOwnFundTransferCheckbox.checked = hideOwnFundTransfer;
     }
     
     loadWallets();
@@ -41,6 +46,12 @@ document.addEventListener('DOMContentLoaded', function() {
     if (hideTrxCheckbox) {
         hideTrxCheckbox.addEventListener('change', function() {
             localStorage.setItem('hideTrxTransactions', this.checked);
+            loadTransactions();
+        });
+    }
+    if (hideOwnFundTransferCheckbox) {
+        hideOwnFundTransferCheckbox.addEventListener('change', function() {
+            localStorage.setItem('hideOwnFundTransfer', this.checked);
             loadTransactions();
         });
     }
@@ -110,6 +121,7 @@ function displayWallets(wallets) {
                             <img src="/static/ico/eye.svg" class="wallet-icon" alt="Hide">
                         </button>
                         <span class="wallet-name clickable" onclick="openWalletDetails(${wallet.id})" title="Click to view details">${escapeHtml(wallet.name)}</span>
+                        <img src="/static/ico/copy.svg" class="wallet-copy-icon" onclick="event.stopPropagation(); copyToClipboard('${escapeHtml(wallet.address)}'); showNotification('Address copied')" title="Copy address" alt="Copy">
                     </div>
                     <div class="wallet-right">
                         <span class="wallet-balance-usdt">${usdtAmount}</span>
@@ -128,10 +140,14 @@ function displayWallets(wallets) {
                                 </div>
                             </div>
                         ` : `
-                            ${wallet.aml_status === 'checked' && wallet.aml_score !== null ? `
-                                <span class="wallet-aml-status"><span class="risk-level risk-level-${(wallet.aml_risk_level || 'undefined').toLowerCase()}">${(wallet.aml_risk_level || 'N/A').toUpperCase()}</span> <span class="risk-score">${parseFloat(wallet.aml_score).toFixed(1)}%</span></span>
+                            ${wallet.balance_changed ? `
+                                <span class="wallet-aml-status"><span class="risk-level risk-level-need-check" style="color: #f0355b; font-weight: 600;">NEED CHECK!</span></span>
                             ` : `
-                                <span class="wallet-aml-status">${wallet.aml_status || 'Pending'}</span>
+                                ${wallet.aml_status === 'checked' && wallet.aml_score !== null ? `
+                                    <span class="wallet-aml-status"><span class="risk-level risk-level-${(wallet.aml_risk_level || 'undefined').toLowerCase()}">${(wallet.aml_risk_level || 'N/A').toUpperCase()}</span> <span class="risk-score">${parseFloat(wallet.aml_score).toFixed(1)}%</span></span>
+                                ` : `
+                                    <span class="wallet-aml-status">${wallet.aml_status || 'Pending'}</span>
+                                `}
                             `}
                             <span class="wallet-aml-date text-muted">${amlDate}</span>
                         `}
@@ -241,29 +257,48 @@ async function reorderWallets() {
 
 // Refresh balances
 async function refreshBalances() {
+    const refreshBtn = document.getElementById('refreshBalancesBtn');
+    const loadingDiv = document.getElementById('balancesLoading');
+    
     try {
-        showNotification('Updating balances...');
+        // Show loading animation
+        if (refreshBtn) {
+            refreshBtn.disabled = true;
+        }
+        if (loadingDiv) {
+            loadingDiv.style.display = 'flex';
+        }
+        
+        showNotification('Обновление балансов...');
         const response = await fetch('/api/wallets/refresh-balances', {
             method: 'POST'
         });
         
         if (response.ok) {
             const data = await response.json();
-            loadWallets();
+            await loadWallets();
             if (data.errors && data.errors.length > 0) {
                 console.error('Balance update errors:', data.errors);
-                showNotification(`Updated ${data.updated || 0} wallets. Check console for errors.`);
+                showNotification(`Обновлено ${data.updated || 0} кошельков. Проверьте консоль на ошибки.`);
             } else {
-                showNotification(`Successfully updated ${data.updated || 0} wallets`);
+                showNotification(`Успешно обновлено ${data.updated || 0} кошельков`);
             }
         } else {
             const errorData = await response.json().catch(() => ({}));
             console.error('Error refreshing balances:', errorData);
-            showNotification('Error refreshing balances');
+            showNotification('Ошибка при обновлении балансов');
         }
     } catch (error) {
         console.error('Error refreshing balances:', error);
-        showNotification('Error refreshing balances');
+        showNotification('Ошибка при обновлении балансов');
+    } finally {
+        // Hide loading animation
+        if (refreshBtn) {
+            refreshBtn.disabled = false;
+        }
+        if (loadingDiv) {
+            loadingDiv.style.display = 'none';
+        }
     }
 }
 
@@ -460,8 +495,10 @@ async function loadTransactions() {
         allTransactions = allData.transactions;
         
         displayTransactions(data.transactions);
+        return Promise.resolve();
     } catch (error) {
         console.error('Error loading transactions:', error);
+        return Promise.reject(error);
     }
 }
 
@@ -470,12 +507,21 @@ function displayTransactions(transactions) {
     const tbody = document.getElementById('transactionsTable');
     tbody.innerHTML = '';
     
-    if (transactions.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" class="text-muted" style="text-align: center; padding: 40px;">No transactions found</td></tr>';
+    // Get hideOwnFundTransfer state
+    const hideOwnFundTransfer = document.getElementById('hideOwnFundTransfer') ? document.getElementById('hideOwnFundTransfer').checked : false;
+    
+    // Filter out own fund transfers if toggle is enabled
+    let filteredTransactions = transactions;
+    if (hideOwnFundTransfer) {
+        filteredTransactions = transactions.filter(tx => tx.comment !== 'Own fund transfer');
+    }
+    
+    if (filteredTransactions.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" class="text-muted" style="text-align: center; padding: 40px;">No transactions found</td></tr>';
         return;
     }
     
-    transactions.forEach(tx => {
+    filteredTransactions.forEach(tx => {
         const row = document.createElement('tr');
         
         // Get transaction type icon (for CUR column)
@@ -507,6 +553,11 @@ function displayTransactions(transactions) {
             <td>${escapeHtml(tx.wallet_name)}</td>
             <td class="text-muted">${tx.counterparty_name || '-'}</td>
             <td>
+                <span class="transaction-comment" onclick="editTransactionComment(${tx.id}, '${escapeHtml(tx.comment || '')}')" title="Click to edit comment" style="cursor: pointer; display: inline-block; min-width: 100px; padding: 4px 8px; border-radius: 4px; transition: background-color 0.2s;" onmouseover="this.style.backgroundColor='var(--bg-tertiary)'" onmouseout="this.style.backgroundColor='transparent'">
+                    ${tx.comment ? escapeHtml(tx.comment) : '<span class="text-muted" style="opacity: 0.5;">-</span>'}
+                </span>
+            </td>
+            <td>
                 <span class="address-short">${shortAddress}</span>
                 ${address ? `
                     <img src="/static/ico/copy.svg" class="copy-icon" onclick="copyToClipboard('${escapeHtml(address)}')" title="Copy address" alt="Copy">
@@ -525,7 +576,14 @@ function displayTransactions(transactions) {
 
 // Refresh transactions
 async function refreshTransactions() {
+    const loadingElement = document.getElementById('transactionsLoading');
+    
     try {
+        // Show loading animation
+        if (loadingElement) {
+            loadingElement.style.display = 'flex';
+        }
+        
         showNotification('Обновление транзакций...');
         const response = await fetch('/api/transactions/refresh', {
             method: 'POST'
@@ -533,7 +591,7 @@ async function refreshTransactions() {
         
         if (response.ok) {
             const data = await response.json();
-            loadTransactions();
+            await loadTransactions();
             if (data.new_transactions > 0) {
                 showNotification(`Добавлено ${data.new_transactions} новых транзакций`);
             } else {
@@ -548,6 +606,11 @@ async function refreshTransactions() {
     } catch (error) {
         console.error('Error refreshing transactions:', error);
         showNotification('Ошибка при обновлении транзакций');
+    } finally {
+        // Hide loading animation
+        if (loadingElement) {
+            loadingElement.style.display = 'none';
+        }
     }
 }
 
@@ -1041,6 +1104,38 @@ async function saveAddressFromTransaction(event) {
     }
 }
 
+// Edit transaction comment
+async function editTransactionComment(transactionId, currentComment) {
+    const comment = prompt('Enter comment for this transaction:', currentComment || '');
+    
+    if (comment === null) {
+        // User cancelled
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/transactions/${transactionId}/comment`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ comment: comment.trim() })
+        });
+        
+        if (response.ok) {
+            // Reload transactions to show updated comment
+            loadTransactions();
+            showNotification('Comment updated');
+        } else {
+            const data = await response.json();
+            alert(data.error || 'Error updating comment');
+        }
+    } catch (error) {
+        console.error('Error updating comment:', error);
+        alert('Error updating comment');
+    }
+}
+
 // Export transactions to Excel
 function exportToExcel() {
     // Check if XLSX library is loaded
@@ -1055,35 +1150,68 @@ function exportToExcel() {
         return;
     }
     
+    // Get current filter states
+    const hideSmall = document.getElementById('hideSmall') ? document.getElementById('hideSmall').checked : false;
+    const hideTrx = document.getElementById('hideTrx') ? document.getElementById('hideTrx').checked : false;
+    const hideOwnFundTransfer = document.getElementById('hideOwnFundTransfer') ? document.getElementById('hideOwnFundTransfer').checked : false;
+    
+    // Apply filters to transactions
+    let filteredTransactions = [...allTransactions];
+    
+    // Filter TRX transactions if hideTrx is enabled
+    if (hideTrx) {
+        filteredTransactions = filteredTransactions.filter(tx => tx.currency !== 'TRX');
+    }
+    
+    // Filter small USDT transactions if hideSmall is enabled
+    if (hideSmall) {
+        filteredTransactions = filteredTransactions.filter(tx => {
+            if (tx.currency === 'USDT' && tx.amount < 10.0) {
+                return false;
+            }
+            return true;
+        });
+    }
+    
+    // Filter own fund transfers if hideOwnFundTransfer is enabled
+    if (hideOwnFundTransfer) {
+        filteredTransactions = filteredTransactions.filter(tx => tx.comment !== 'Own fund transfer');
+    }
+    
+    if (filteredTransactions.length === 0) {
+        alert('No transactions to export after applying filters');
+        return;
+    }
+    
     // Prepare data for Excel
-    const excelData = allTransactions.map(tx => {
+    const excelData = filteredTransactions.map(tx => {
         const date = new Date(tx.created_at);
         const dateStr = date.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
         const timeStr = date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
         
-        // Format amount for Excel (no plus sign, no thousands separator)
-        let amountStr = '';
+        // Format amount as number (not text) for Excel
+        let amountNum;
         if (tx.type === 'approve') {
-            // For approve, just show the number without formatting
-            amountStr = tx.amount.toFixed(2).replace('.', ',');
+            // For approve, show positive number
+            amountNum = tx.amount;
         } else {
-            // Format number: 2 decimal places, comma as decimal separator, no thousands separator, no plus for incoming
-            const formatted = tx.amount.toFixed(2).replace('.', ',');
-            amountStr = tx.direction === 'incoming' ? formatted : `-${formatted}`;
+            // For incoming: positive, for outgoing: negative
+            amountNum = tx.direction === 'incoming' ? tx.amount : -tx.amount;
         }
         
         const address = tx.direction === 'incoming' ? tx.from_address : tx.to_address;
         
         return {
+            'Date': dateStr,
+            'Time': timeStr,
             'Currency': tx.currency,
             'Type': tx.type || 'transfer',
-            'Amount': amountStr,
+            'Amount': amountNum,  // Number format, not text
             'Direction': tx.direction,
             'Wallet': tx.wallet_name,
             'From/To': tx.counterparty_name || '-',
+            'Comment': tx.comment || '-',
             'Address': address || '-',
-            'Date': dateStr,
-            'Time': timeStr,
             'AML Status': tx.aml_status || 'pending'
         };
     });
@@ -1094,18 +1222,31 @@ function exportToExcel() {
     
     // Set column widths
     const colWidths = [
+        { wch: 12 }, // Date
+        { wch: 10 }, // Time
         { wch: 10 }, // Currency
         { wch: 12 }, // Type
         { wch: 15 }, // Amount
         { wch: 10 }, // Direction
         { wch: 20 }, // Wallet
         { wch: 20 }, // From/To
+        { wch: 30 }, // Comment
         { wch: 40 }, // Address
-        { wch: 12 }, // Date
-        { wch: 10 }, // Time
         { wch: 12 }  // AML Status
     ];
     ws['!cols'] = colWidths;
+    
+    // Format Amount column as number with 2 decimal places
+    const range = XLSX.utils.decode_range(ws['!ref']);
+    const amountColIndex = 4; // Amount is 5th column (0-indexed: Date=0, Time=1, Currency=2, Type=3, Amount=4)
+    
+    for (let row = 1; row <= range.e.r; row++) { // Skip header row (row 0)
+        const cellAddress = XLSX.utils.encode_cell({ r: row, c: amountColIndex });
+        if (ws[cellAddress]) {
+            // Ensure the cell is treated as a number
+            ws[cellAddress].z = '#,##0.00'; // Number format with 2 decimal places and thousands separator
+        }
+    }
     
     // Add worksheet to workbook
     XLSX.utils.book_append_sheet(wb, ws, 'Transactions');

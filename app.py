@@ -24,6 +24,7 @@ class Wallet(db.Model):
     aml_score = db.Column(db.Float, nullable=True)  # Процент риска (0.0-100.0)
     aml_risk_level = db.Column(db.String(20), nullable=True)  # low, medium, high
     aml_checking = db.Column(db.Boolean, default=False)  # Флаг проверки в процессе
+    balance_changed = db.Column(db.Boolean, default=False)  # Флаг изменения баланса
     is_hidden = db.Column(db.Boolean, default=False)
     sort_order = db.Column(db.Integer, default=0)
     color = db.Column(db.String(20), default='gray')  # red, blue, purple, gray, green, orange, yellow
@@ -41,6 +42,7 @@ class Transaction(db.Model):
     counterparty_name = db.Column(db.String(100), nullable=True)
     aml_status = db.Column(db.String(50), default='pending')
     tx_hash = db.Column(db.String(200), nullable=True)
+    comment = db.Column(db.String(500), nullable=True)  # User comment for transaction
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     wallet = db.relationship('Wallet', backref=db.backref('transactions', lazy=True, cascade='all, delete-orphan'))
@@ -61,6 +63,16 @@ class AddressBook(db.Model):
     date_added = db.Column(db.DateTime, default=datetime.utcnow)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class AmlCheck(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    address = db.Column(db.String(200), nullable=False)
+    risk_level = db.Column(db.String(50), nullable=True)
+    risk_score = db.Column(db.Float, nullable=True)  # 0.0-100.0
+    customer = db.Column(db.String(200), nullable=True)  # From address book
+    manager = db.Column(db.String(100), default='N4')
+    checked_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 # Routes
 @app.route('/')
@@ -132,6 +144,7 @@ def get_wallets():
             'aml_score': w.aml_score,
             'aml_risk_level': w.aml_risk_level,
             'aml_checking': w.aml_checking or False,
+            'balance_changed': w.balance_changed or False,
             'is_hidden': w.is_hidden,
             'sort_order': w.sort_order,
             'color': w.color or 'gray'
@@ -276,6 +289,10 @@ def refresh_balances():
             else:
                 errors.append(f"Failed to get TRX balance for {wallet.name}")
             
+            # Store old balances for comparison BEFORE updating
+            old_balance_trx = wallet.balance_trx
+            old_balance_usdt = wallet.balance_usdt
+            
             # Get USDT (TRC20) balance using tronpy library (more reliable)
             wallet.balance_usdt = 0.0
             
@@ -365,6 +382,17 @@ def refresh_balances():
                 traceback.print_exc()
                 errors.append(f"Error calling USDT contract for {wallet.name}: {str(e)}")
             
+            # Check if USDT balance changed by more than 10 USDT (TRX changes are ignored)
+            # Only SET balance_changed to True if balance changed significantly
+            # Do NOT reset it to False here - it should only be reset after AML check
+            usdt_change = abs(wallet.balance_usdt - old_balance_usdt)
+            if usdt_change > 10.0:
+                wallet.balance_changed = True
+                print(f"Balance changed for {wallet.name}: USDT {old_balance_usdt} -> {wallet.balance_usdt} (change: {usdt_change:.2f} USDT)")
+            # If balance didn't change significantly, keep the existing balance_changed flag
+            # (don't reset it - it will only be reset after AML check)
+            
+            db.session.commit()
             updated_count += 1
             
         except Exception as e:
@@ -516,6 +544,24 @@ def perform_aml_check_async(wallet_id):
                         wallet.aml_checked_at = datetime.utcnow()
                         wallet.aml_score = aml_score
                         wallet.aml_risk_level = risk_level
+                        wallet.balance_changed = False  # Reset balance_changed flag after AML check
+                        
+                        # Получаем customer из адресной книги, если есть
+                        customer = None
+                        address_entry = AddressBook.query.filter_by(address=wallet.address).first()
+                        if address_entry:
+                            customer = address_entry.customer
+                        
+                        # Сохраняем результат проверки в таблицу AmlCheck
+                        aml_check = AmlCheck(
+                            address=wallet.address,
+                            risk_level=risk_level,
+                            risk_score=aml_score,
+                            customer=customer,
+                            manager='N4',
+                            checked_at=datetime.utcnow()
+                        )
+                        db.session.add(aml_check)
                         db.session.commit()
                         return
                     elif check_status == 'error':
@@ -532,6 +578,190 @@ def perform_aml_check_async(wallet_id):
             wallet.aml_status = 'error'
             db.session.commit()
             print(f"AML check error for wallet {wallet_id}: {str(e)}")
+
+def perform_aml_check_for_address(address, manager='N4'):
+    """Выполняет AML проверку для произвольного адреса"""
+    try:
+        # BitOK API credentials
+        API_KEY_ID = 'hvvunrOUKjEzlkMz4JiFUPPD5Je7E8qK'
+        API_SECRET = 'dO69KPVW9qOH03Of5c3To3cgmF9RClSp9xf013IG8HVPMr68WTvBUoVFtLcnKrZq'
+        API_BASE_URL = 'https://kyt-api.bitok.org'
+        
+        # Создаем запрос на проверку адреса
+        timestamp = str(int(time.time() * 1000))
+        endpoint = '/v1/manual-checks/check-address/'
+        
+        payload = {
+            'network': 'TRX',
+            'address': address
+        }
+        
+        signature = build_bitok_signature('POST', endpoint, timestamp, payload, API_SECRET)
+        
+        headers = {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'API-KEY-ID': API_KEY_ID,
+            'API-TIMESTAMP': timestamp,
+            'API-SIGNATURE': signature
+        }
+        
+        # Отправляем запрос на проверку
+        response = requests.post(
+            f'{API_BASE_URL}{endpoint}',
+            headers=headers,
+            json=payload,
+            timeout=10
+        )
+        
+        if response.status_code != 200:
+            raise Exception(f"BitOK API error: {response.status_code} - {response.text}")
+        
+        check_data = response.json()
+        check_id = check_data.get('id')
+        
+        if not check_id:
+            raise Exception("No check ID returned from BitOK API")
+        
+        # Опрашиваем статус проверки (максимум 60 секунд = 1 минута)
+        max_attempts = 60
+        attempt = 0
+        
+        while attempt < max_attempts:
+            time.sleep(1)  # Ждем 1 секунду между запросами
+            
+            timestamp = str(int(time.time() * 1000))
+            endpoint = f'/v1/manual-checks/{check_id}/'
+            signature = build_bitok_signature('GET', endpoint, timestamp, None, API_SECRET)
+            
+            headers = {
+                'Accept': 'application/json',
+                'API-KEY-ID': API_KEY_ID,
+                'API-TIMESTAMP': timestamp,
+                'API-SIGNATURE': signature
+            }
+            
+            status_response = requests.get(
+                f'{API_BASE_URL}{endpoint}',
+                headers=headers,
+                timeout=10
+            )
+            
+            if status_response.status_code == 200:
+                status_data = status_response.json()
+                check_status = status_data.get('check_status')
+                
+                if check_status == 'checked':
+                    risk_level = status_data.get('risk_level', 'undefined')
+                    risk_score = status_data.get('risk_score')
+                    
+                    # Конвертируем risk_score (0.0-1.0) в процент (0.0-100.0)
+                    if risk_score is not None:
+                        aml_score = round(risk_score * 100, 1)
+                    else:
+                        # Если нет risk_score, определяем по risk_level
+                        if risk_level == 'low':
+                            aml_score = 20
+                        elif risk_level == 'medium':
+                            aml_score = 50
+                        elif risk_level == 'high':
+                            aml_score = 80
+                        elif risk_level == 'severe':
+                            aml_score = 100
+                        else:
+                            aml_score = 0
+                    
+                    # Получаем customer из адресной книги, если есть
+                    customer = None
+                    address_entry = AddressBook.query.filter_by(address=address).first()
+                    if address_entry:
+                        customer = address_entry.customer
+                    
+                    # Сохраняем результат проверки
+                    aml_check = AmlCheck(
+                        address=address,
+                        risk_level=risk_level,
+                        risk_score=aml_score,
+                        customer=customer,
+                        manager=manager,
+                        checked_at=datetime.utcnow()
+                    )
+                    db.session.add(aml_check)
+                    db.session.commit()
+                    
+                    return {
+                        'success': True,
+                        'risk_level': risk_level,
+                        'risk_score': aml_score,
+                        'customer': customer
+                    }
+                elif check_status == 'error':
+                    raise Exception("BitOK API check failed with error status")
+            
+            attempt += 1
+        
+        # Если проверка не завершилась за отведенное время
+        raise Exception("AML check timeout - check is still in progress")
+        
+    except Exception as e:
+        print(f"AML check error for address {address}: {str(e)}")
+        raise
+
+@app.route('/api/aml-check/check-address', methods=['POST'])
+def check_address_aml():
+    """Проверка адреса на AML"""
+    data = request.json
+    address = data.get('address', '').strip()
+    manager = data.get('manager', 'N4')
+    
+    if not address:
+        return jsonify({
+            'success': False,
+            'error': 'Address is required'
+        }), 400
+    
+    # Валидация адреса TRX
+    if not (address.startswith('T') and len(address) == 34):
+        return jsonify({
+            'success': False,
+            'error': 'Invalid TRX address format'
+        }), 400
+    
+    # Запускаем проверку в фоновом потоке
+    thread = threading.Thread(target=perform_aml_check_for_address_async, args=(address, manager))
+    thread.daemon = True
+    thread.start()
+    
+    return jsonify({
+        'success': True,
+        'message': 'AML check started'
+    })
+
+def perform_aml_check_for_address_async(address, manager):
+    """Выполняет AML проверку в фоновом потоке"""
+    with app.app_context():
+        try:
+            result = perform_aml_check_for_address(address, manager)
+            print(f"AML check completed for {address}: {result}")
+        except Exception as e:
+            print(f"AML check error for {address}: {str(e)}")
+
+@app.route('/api/aml-check', methods=['GET'])
+def get_aml_checks():
+    """Получить список всех AML проверок"""
+    checks = AmlCheck.query.order_by(AmlCheck.checked_at.desc()).all()
+    
+    return jsonify({
+        'checks': [{
+            'id': check.id,
+            'address': check.address,
+            'risk_level': check.risk_level,
+            'risk_score': check.risk_score,
+            'customer': check.customer,
+            'manager': check.manager,
+            'checked_at': check.checked_at.isoformat() if check.checked_at else None
+        } for check in checks]
+    })
 
 @app.route('/api/wallets/<int:wallet_id>/aml-check', methods=['POST'])
 def check_aml(wallet_id):
@@ -595,6 +825,7 @@ def get_transactions():
             'counterparty_name': t.counterparty_name,
             'aml_status': t.aml_status,
             'tx_hash': t.tx_hash,
+            'comment': t.comment,
             'created_at': t.created_at.isoformat()
         } for t in transactions]
     })
@@ -638,6 +869,9 @@ def refresh_transactions():
     wallets = Wallet.query.all()
     new_count = 0
     errors = []
+    
+    # Get all wallet addresses for internal transfer detection
+    wallet_addresses = set(w.address.lower() for w in wallets)
     
     print(f"\n=== REFRESH TRANSACTIONS CALLED ===")
     print(f"Found {len(wallets)} wallets to check")
@@ -766,6 +1000,15 @@ def refresh_transactions():
                                 else:
                                     counterparty_name = None
                                 
+                                # Check if this is an internal transfer (both addresses belong to our wallets)
+                                comment = None
+                                if from_addr and to_addr:
+                                    from_addr_lower = from_addr.lower()
+                                    to_addr_lower = to_addr.lower()
+                                    if from_addr_lower in wallet_addresses and to_addr_lower in wallet_addresses:
+                                        comment = "Own fund transfer"
+                                        print(f"Detected own fund transfer: {from_addr} -> {to_addr}")
+                                
                                 transaction = Transaction(
                                     wallet_id=wallet.id,
                                     currency='USDT',
@@ -775,6 +1018,7 @@ def refresh_transactions():
                                     from_address=from_addr if from_addr else None,
                                     to_address=to_addr if to_addr else None,
                                     counterparty_name=counterparty_name,
+                                    comment=comment,
                                     tx_hash=tx_hash,
                                     created_at=tx_datetime
                                 )
@@ -854,6 +1098,15 @@ def refresh_transactions():
                                         # Для TransferContract используем direction как тип (incoming/outgoing)
                                         transaction_type = direction
                                         
+                                        # Check if this is an internal transfer (both addresses belong to our wallets)
+                                        comment = None
+                                        if from_addr and to_addr:
+                                            from_addr_lower = from_addr.lower()
+                                            to_addr_lower = to_addr.lower()
+                                            if from_addr_lower in wallet_addresses and to_addr_lower in wallet_addresses:
+                                                comment = "Own fund transfer"
+                                                print(f"Detected own fund transfer: {from_addr} -> {to_addr}")
+                                        
                                         transaction = Transaction(
                                             wallet_id=wallet.id,
                                             currency='TRX',
@@ -863,6 +1116,7 @@ def refresh_transactions():
                                             from_address=from_addr if from_addr else None,
                                             to_address=to_addr if to_addr else None,
                                             counterparty_name=None,  # TRX transactions don't use address book
+                                            comment=comment,
                                             tx_hash=tx_hash,
                                             created_at=tx_datetime
                                         )
@@ -1274,6 +1528,21 @@ def delete_addressbook_entry(entry_id):
     db.session.delete(entry)
     db.session.commit()
     return jsonify({'success': True})
+
+@app.route('/api/transactions/<int:transaction_id>/comment', methods=['PUT'])
+def update_transaction_comment(transaction_id):
+    """Update comment for a transaction"""
+    transaction = Transaction.query.get_or_404(transaction_id)
+    data = request.json
+    comment = data.get('comment', '').strip()
+    
+    transaction.comment = comment if comment else None
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'comment': transaction.comment
+    })
 
 @app.route('/api/transactions/update-counterparty', methods=['POST'])
 def update_transactions_counterparty():

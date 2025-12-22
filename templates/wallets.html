@@ -40,9 +40,11 @@
         
         <div class="wallet-controls">
             <button class="btn btn-sm" onclick="openAddWalletModal()">+ Add Wallet</button>
-            <button class="btn-icon" onclick="refreshBalances()" title="Refresh Balances">
-                <img src="/static/ico/refresh.svg" class="btn-icon-img" alt="Refresh">
-            </button>
+            <button class="btn btn-sm btn-secondary" id="refreshBalancesBtn" onclick="refreshBalances()">Refresh</button>
+            <div id="balancesLoading" class="balances-loading" style="display: none;">
+                <div class="loading-spinner" style="display: inline-block; margin-right: 8px;"></div>
+                <span class="loading-text">Обновление балансов...</span>
+            </div>
             <button class="btn-icon" id="toggleHiddenBtn" onclick="toggleHiddenWallets()" title="Toggle Hidden Wallets">
                 <img src="/static/ico/eye.svg" id="toggleHiddenIcon" class="btn-icon-img" alt="Toggle Hidden">
             </button>
@@ -66,9 +68,18 @@
                 <input type="checkbox" id="hideTrx">
                 <label for="hideTrx">Hide TRX</label>
             </div>
+            <div class="toggle-switch">
+                <input type="checkbox" id="hideOwnFundTransfer">
+                <label for="hideOwnFundTransfer">Own fund transfer</label>
+            </div>
             <button class="btn btn-sm btn-secondary" onclick="refreshTransactions()">Refresh</button>
             <button class="btn btn-sm btn-secondary" onclick="exportToExcel()">Export to Excel</button>
         </div>
+    </div>
+    
+    <div id="transactionsLoading" class="transactions-loading" style="display: none;">
+        <div class="loading-spinner"></div>
+        <span class="loading-text">Обновление транзакций...</span>
     </div>
     
     <div class="table-container">
@@ -79,6 +90,7 @@
                     <th>AMOUNT</th>
                     <th>WALLET</th>
                     <th>FROM/TO</th>
+                    <th>COMMENT</th>
                     <th>ADDRESS</th>
                     <th>AML</th>
                     <th>DATE/TIME</th>
