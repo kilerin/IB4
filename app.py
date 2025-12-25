@@ -43,6 +43,7 @@ class Transaction(db.Model):
     aml_status = db.Column(db.String(50), default='pending')
     tx_hash = db.Column(db.String(200), nullable=True)
     comment = db.Column(db.String(500), nullable=True)  # User comment for transaction
+    transaction_type = db.Column(db.String(50), nullable=True)  # Sell usdt, Buy usdt, Alex, Agent, Loan, Expence, Other, Transit
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     wallet = db.relationship('Wallet', backref=db.backref('transactions', lazy=True, cascade='all, delete-orphan'))
@@ -791,6 +792,26 @@ def check_aml(wallet_id):
         'aml_checking': True
     })
 
+@app.route('/api/wallets/<int:wallet_id>/reset-aml-checking', methods=['POST'])
+def reset_aml_checking(wallet_id):
+    """Сбрасывает зависший флаг AML проверки"""
+    wallet = Wallet.query.get_or_404(wallet_id)
+    
+    if wallet.aml_checking:
+        wallet.aml_checking = False
+        if wallet.aml_status == 'checking':
+            wallet.aml_status = 'pending'
+        db.session.commit()
+        return jsonify({
+            'success': True,
+            'message': 'AML checking flag reset'
+        })
+    else:
+        return jsonify({
+            'success': False,
+            'message': 'Wallet is not in checking state'
+        }), 400
+
 @app.route('/api/transactions', methods=['GET'])
 def get_transactions():
     hide_small = request.args.get('hide_small', 'false') == 'true'
@@ -826,6 +847,7 @@ def get_transactions():
             'aml_status': t.aml_status,
             'tx_hash': t.tx_hash,
             'comment': t.comment,
+            'transaction_type': t.transaction_type,
             'created_at': t.created_at.isoformat()
         } for t in transactions]
     })
@@ -871,7 +893,8 @@ def refresh_transactions():
     errors = []
     
     # Get all wallet addresses for internal transfer detection
-    wallet_addresses = set(w.address.lower() for w in wallets)
+    # Normalize addresses: strip whitespace and convert to lowercase
+    wallet_addresses = set(w.address.strip().lower() for w in wallets if w.address)
     
     print(f"\n=== REFRESH TRANSACTIONS CALLED ===")
     print(f"Found {len(wallets)} wallets to check")
@@ -1003,11 +1026,24 @@ def refresh_transactions():
                                 # Check if this is an internal transfer (both addresses belong to our wallets)
                                 comment = None
                                 if from_addr and to_addr:
-                                    from_addr_lower = from_addr.lower()
-                                    to_addr_lower = to_addr.lower()
-                                    if from_addr_lower in wallet_addresses and to_addr_lower in wallet_addresses:
-                                        comment = "Own fund transfer"
-                                        print(f"Detected own fund transfer: {from_addr} -> {to_addr}")
+                                    # Normalize addresses: strip whitespace and convert to lowercase
+                                    from_addr_clean = from_addr.strip().lower() if isinstance(from_addr, str) else str(from_addr).strip().lower()
+                                    to_addr_clean = to_addr.strip().lower() if isinstance(to_addr, str) else str(to_addr).strip().lower()
+                                    
+                                    # Check if both addresses are non-empty and belong to our wallets
+                                    if from_addr_clean and to_addr_clean:
+                                        if from_addr_clean in wallet_addresses and to_addr_clean in wallet_addresses:
+                                            comment = "Own fund transfer"
+                                            print(f"Detected own fund transfer: {from_addr} -> {to_addr}")
+                                        else:
+                                            # Debug output to help diagnose why transfers aren't detected
+                                            print(f"NOT detected as own fund transfer: {from_addr} -> {to_addr}")
+                                            print(f"  from_addr_clean in wallet_addresses: {from_addr_clean in wallet_addresses}")
+                                            print(f"  to_addr_clean in wallet_addresses: {to_addr_clean in wallet_addresses}")
+                                            if from_addr_clean not in wallet_addresses:
+                                                print(f"  from_addr '{from_addr_clean}' not found in wallet addresses")
+                                            if to_addr_clean not in wallet_addresses:
+                                                print(f"  to_addr '{to_addr_clean}' not found in wallet addresses")
                                 
                                 transaction = Transaction(
                                     wallet_id=wallet.id,
@@ -1101,11 +1137,24 @@ def refresh_transactions():
                                         # Check if this is an internal transfer (both addresses belong to our wallets)
                                         comment = None
                                         if from_addr and to_addr:
-                                            from_addr_lower = from_addr.lower()
-                                            to_addr_lower = to_addr.lower()
-                                            if from_addr_lower in wallet_addresses and to_addr_lower in wallet_addresses:
-                                                comment = "Own fund transfer"
-                                                print(f"Detected own fund transfer: {from_addr} -> {to_addr}")
+                                            # Normalize addresses: strip whitespace and convert to lowercase
+                                            from_addr_clean = from_addr.strip().lower() if isinstance(from_addr, str) else str(from_addr).strip().lower()
+                                            to_addr_clean = to_addr.strip().lower() if isinstance(to_addr, str) else str(to_addr).strip().lower()
+                                            
+                                            # Check if both addresses are non-empty and belong to our wallets
+                                            if from_addr_clean and to_addr_clean:
+                                                if from_addr_clean in wallet_addresses and to_addr_clean in wallet_addresses:
+                                                    comment = "Own fund transfer"
+                                                    print(f"Detected own fund transfer: {from_addr} -> {to_addr}")
+                                                else:
+                                                    # Debug output to help diagnose why transfers aren't detected
+                                                    print(f"NOT detected as own fund transfer: {from_addr} -> {to_addr}")
+                                                    print(f"  from_addr_clean in wallet_addresses: {from_addr_clean in wallet_addresses}")
+                                                    print(f"  to_addr_clean in wallet_addresses: {to_addr_clean in wallet_addresses}")
+                                                    if from_addr_clean not in wallet_addresses:
+                                                        print(f"  from_addr '{from_addr_clean}' not found in wallet addresses")
+                                                    if to_addr_clean not in wallet_addresses:
+                                                        print(f"  to_addr '{to_addr_clean}' not found in wallet addresses")
                                         
                                         transaction = Transaction(
                                             wallet_id=wallet.id,
@@ -1320,11 +1369,38 @@ def refresh_transactions():
                 updated_count += 1
                 print(f"Updated transaction {tx.id}: set counterparty_name={counterparty_name} for address={counterparty_address}")
     
+    # Update "Own fund transfer" status for existing transactions that don't have it yet
+    print("\n=== UPDATING EXISTING TRANSACTIONS WITH OWN FUND TRANSFER STATUS ===")
+    own_fund_updated_count = 0
+    existing_txs = Transaction.query.filter(
+        (Transaction.comment != 'Own fund transfer') | (Transaction.comment == None)
+    ).filter(
+        Transaction.from_address.isnot(None),
+        Transaction.to_address.isnot(None)
+    ).all()
+    
+    for tx in existing_txs:
+        if tx.from_address and tx.to_address:
+            # Normalize addresses: strip whitespace and convert to lowercase
+            from_addr_clean = tx.from_address.strip().lower() if isinstance(tx.from_address, str) else str(tx.from_address).strip().lower()
+            to_addr_clean = tx.to_address.strip().lower() if isinstance(tx.to_address, str) else str(tx.to_address).strip().lower()
+            
+            # Check if both addresses are non-empty and belong to our wallets
+            if from_addr_clean and to_addr_clean:
+                if from_addr_clean in wallet_addresses and to_addr_clean in wallet_addresses:
+                    tx.comment = "Own fund transfer"
+                    own_fund_updated_count += 1
+                    print(f"Updated transaction {tx.id} ({tx.tx_hash[:16]}...): Own fund transfer")
+    
+    if own_fund_updated_count > 0:
+        print(f"Updated {own_fund_updated_count} transactions with 'Own fund transfer' status")
+    
     db.session.commit()
     
     print(f"\n=== TRANSACTIONS REFRESH COMPLETE ===")
     print(f"Added {new_count} new transactions")
     print(f"Updated {updated_count} existing transactions with address book entries")
+    print(f"Updated {own_fund_updated_count} existing transactions with 'Own fund transfer' status")
     if errors:
         print(f"Errors: {errors}")
     
@@ -1542,6 +1618,26 @@ def update_transaction_comment(transaction_id):
     return jsonify({
         'success': True,
         'comment': transaction.comment
+    })
+
+@app.route('/api/transactions/<int:transaction_id>/type', methods=['PUT'])
+def update_transaction_type(transaction_id):
+    """Update transaction type for a transaction"""
+    transaction = Transaction.query.get_or_404(transaction_id)
+    data = request.json
+    transaction_type = data.get('transaction_type', '').strip()
+    
+    # Validate transaction type
+    valid_types = ['Sell usdt', 'Buy usdt', 'Alex', 'Agent', 'Loan', 'Expence', 'Other', 'Transit']
+    if transaction_type and transaction_type not in valid_types:
+        return jsonify({'error': 'Invalid transaction type'}), 400
+    
+    transaction.transaction_type = transaction_type if transaction_type else None
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'transaction_type': transaction.transaction_type
     })
 
 @app.route('/api/transactions/update-counterparty', methods=['POST'])

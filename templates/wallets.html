@@ -5,11 +5,6 @@
 {% endblock %}
 
 {% block content %}
-<div class="page-header">
-    <h1>Wallets</h1>
-    <p>Manage your crypto wallets and view transactions</p>
-</div>
-
 <div class="wallets-layout">
     <!-- Wallets Panel (слева) -->
     <div class="card wallets-panel">
@@ -72,7 +67,7 @@
                 <input type="checkbox" id="hideOwnFundTransfer">
                 <label for="hideOwnFundTransfer">Own fund transfer</label>
             </div>
-            <button class="btn btn-sm btn-secondary" onclick="refreshTransactions()">Refresh</button>
+            <button class="btn btn-sm btn-secondary" id="refreshTransactionsBtn" onclick="refreshTransactions()">Refresh</button>
             <button class="btn btn-sm btn-secondary" onclick="exportToExcel()">Export to Excel</button>
         </div>
     </div>
@@ -86,13 +81,12 @@
         <table>
             <thead>
                 <tr>
-                    <th>CUR</th>
                     <th>AMOUNT</th>
                     <th>WALLET</th>
                     <th>FROM/TO</th>
+                    <th>TYPE</th>
                     <th>COMMENT</th>
                     <th>ADDRESS</th>
-                    <th>AML</th>
                     <th>DATE/TIME</th>
                 </tr>
             </thead>
@@ -190,7 +184,6 @@
                     <table>
                         <thead>
                             <tr>
-                                <th>CUR</th>
                                 <th>AMOUNT</th>
                                 <th>DIRECTION</th>
                                 <th>ADDRESS</th>
@@ -281,6 +274,53 @@
         <div class="modal-footer">
             <button type="button" class="btn btn-secondary" onclick="closeAmlConfirmModal()">Cancel</button>
             <button type="button" class="btn" id="confirmAmlCheckBtn">OK</button>
+        </div>
+    </div>
+</div>
+
+<!-- Transaction Type Selection Modal -->
+<div id="transactionTypeModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>Select Transaction Type</h2>
+            <p class="text-muted">Choose a type for this transaction</p>
+        </div>
+        <div class="modal-body">
+            <div style="display: flex; flex-direction: column; gap: 10px;">
+                <button type="button" class="btn btn-secondary" onclick="selectTransactionType('Sell usdt')">Sell usdt</button>
+                <button type="button" class="btn btn-secondary" onclick="selectTransactionType('Buy usdt')">Buy usdt</button>
+                <button type="button" class="btn btn-secondary" onclick="selectTransactionType('Alex')">Alex</button>
+                <button type="button" class="btn btn-secondary" onclick="selectTransactionType('Agent')">Agent</button>
+                <button type="button" class="btn btn-secondary" onclick="selectTransactionType('Loan')">Loan</button>
+                <button type="button" class="btn btn-secondary" onclick="selectTransactionType('Expence')">Expence</button>
+                <button type="button" class="btn btn-secondary" onclick="selectTransactionType('Other')">Other</button>
+                <button type="button" class="btn btn-secondary" onclick="selectTransactionType('Transit')">Transit</button>
+                <button type="button" class="btn btn-secondary" onclick="selectTransactionType('')" style="margin-top: 10px;">(None)</button>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" onclick="closeTransactionTypeModal()">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<!-- Transaction Comment Edit Modal -->
+<div id="transactionCommentModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>Edit Comment</h2>
+            <p class="text-muted">Enter or edit comment for this transaction</p>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label class="form-label">Comment</label>
+                <textarea id="transactionCommentInput" class="form-input" rows="4" maxlength="500" placeholder="Enter comment..."></textarea>
+                <small class="text-muted" id="commentCharCount">0 / 500 characters</small>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" onclick="closeTransactionCommentModal()">Cancel</button>
+            <button type="button" class="btn" onclick="saveTransactionComment()">Save</button>
         </div>
     </div>
 </div>

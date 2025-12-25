@@ -33,9 +33,8 @@ body {
 
 /* Sidebar */
 .sidebar {
-    width: 250px;
-    background-color: var(--bg-secondary);
-    border-right: 1px solid var(--border-color);
+    width: 147px;
+    background-color: #ffffff;
     display: flex;
     flex-direction: column;
     padding: 20px 0;
@@ -43,8 +42,8 @@ body {
 
 .logo {
     padding: 0 20px 30px;
-    border-bottom: 1px solid var(--border-color);
     margin-bottom: 20px;
+    background-color: #ffffff;
 }
 
 .logo h1 {
@@ -87,7 +86,7 @@ body {
 .main-content {
     flex: 1;
     overflow-y: auto;
-    padding: 30px;
+    padding: 30px 30px 30px 15px;
     background-color: var(--bg-primary);
 }
 
@@ -156,6 +155,21 @@ body {
     background-color: var(--border-color);
 }
 
+/* Green Refresh buttons */
+#refreshBalancesBtn,
+#refreshTransactionsBtn {
+    background-color: var(--success-color);
+    color: white;
+    border: 1px solid var(--success-color);
+    box-sizing: border-box;
+}
+
+#refreshBalancesBtn:hover,
+#refreshTransactionsBtn:hover {
+    background-color: #218838;
+    border-color: #218838;
+}
+
 .btn-success {
     background-color: var(--success-color);
 }
@@ -167,6 +181,24 @@ body {
 .btn-sm {
     padding: 6px 12px;
     font-size: 12px;
+    line-height: 1.5;
+    height: auto;
+}
+
+/* Make Add Wallet and Refresh buttons same size as Reserves button */
+.wallet-controls .btn.btn-sm {
+    padding: 4px 8px;
+    font-size: 11px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 23px;
+    box-sizing: border-box;
+}
+
+/* Ensure Add Wallet button has transparent border to match height */
+.wallet-controls .btn.btn-sm:not(.btn-secondary) {
+    border: 1px solid transparent;
 }
 
 .btn-icon {
@@ -339,13 +371,21 @@ tbody tr:hover {
     line-height: 1.3;
 }
 
+.wallet-address-suffix {
+    font-size: 12px;
+    color: var(--text-secondary);
+    opacity: 0.7;
+    margin-left: 4px;
+    font-weight: 400;
+}
+
 .wallet-copy-icon {
     width: 14px;
     height: 14px;
     cursor: pointer;
     opacity: 0.6;
     transition: opacity 0.2s;
-    margin-left: 6px;
+    margin-left: 0;
     vertical-align: middle;
     display: inline-block;
 }
@@ -574,11 +614,29 @@ tbody tr:hover {
     margin-bottom: 5px;
 }
 
+.modal-body {
+    padding: 20px 0;
+}
+
 .modal-footer {
     display: flex;
     justify-content: flex-end;
     gap: 10px;
     margin-top: 20px;
+}
+
+/* Transaction type selection buttons */
+#transactionTypeModal .modal-body button {
+    width: 100%;
+    padding: 12px 16px;
+    text-align: left;
+    transition: all 0.2s;
+}
+
+#transactionTypeModal .modal-body button:hover {
+    background-color: var(--accent-color);
+    color: #2c3e50;
+    transform: translateX(4px);
 }
 
 /* Empty state */
@@ -1060,6 +1118,73 @@ tbody tr:hover {
     margin-left: 8px;
 }
 
+/* Transaction Type Badges */
+.transaction-type {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 6px;
+    font-size: 0.9em;
+    font-weight: 500;
+    cursor: pointer;
+    transition: opacity 0.2s, transform 0.1s;
+    white-space: nowrap;
+}
+
+.transaction-type:hover {
+    opacity: 0.8;
+    transform: scale(1.05);
+}
+
+.transaction-type-badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 6px;
+    font-size: 0.9em;
+    font-weight: 500;
+    color: white;
+    white-space: nowrap;
+}
+
+/* Colors for each transaction type */
+.transaction-type-badge.type-sell-usdt {
+    background-color: #e74c3c; /* Red for sell */
+}
+
+.transaction-type-badge.type-buy-usdt {
+    background-color: #27ae60; /* Green for buy */
+}
+
+.transaction-type-badge.type-alex-deal {
+    background-color: #3498db; /* Blue */
+}
+
+.transaction-type-badge.type-agent-deal {
+    background-color: #9b59b6; /* Purple */
+}
+
+.transaction-type-badge.type-loan {
+    background-color: #f39c12; /* Orange */
+}
+
+.transaction-type-badge.type-expence {
+    background-color: #c0392b; /* Dark red/burgundy */
+}
+
+.transaction-type-badge.type-other {
+    background-color: #7f8c8d; /* Gray */
+}
+
+.transaction-type-badge.type-transit {
+    background-color: #16a085; /* Teal */
+}
+
+.transaction-type-badge.type-none {
+    background-color: transparent;
+    color: var(--text-secondary);
+    opacity: 0.5;
+    border: 1px solid var(--border-color);
+}
+
 /* Balances Loading Animation */
 .balances-loading {
     display: flex;
@@ -1067,5 +1192,72 @@ tbody tr:hover {
     gap: 8px;
     padding: 8px 12px;
     margin-left: 8px;
+}
+
+/* Transaction Type Badges */
+.transaction-type {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 6px;
+    font-size: 0.9em;
+    font-weight: 500;
+    cursor: pointer;
+    transition: opacity 0.2s, transform 0.1s;
+    white-space: nowrap;
+}
+
+.transaction-type:hover {
+    opacity: 0.8;
+    transform: scale(1.05);
+}
+
+.transaction-type-badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 6px;
+    font-size: 0.9em;
+    font-weight: 500;
+    color: white;
+    white-space: nowrap;
+}
+
+/* Colors for each transaction type */
+.transaction-type-badge.type-sell-usdt {
+    background-color: #e74c3c; /* Red for sell */
+}
+
+.transaction-type-badge.type-buy-usdt {
+    background-color: #27ae60; /* Green for buy */
+}
+
+.transaction-type-badge.type-alex-deal {
+    background-color: #3498db; /* Blue */
+}
+
+.transaction-type-badge.type-agent-deal {
+    background-color: #9b59b6; /* Purple */
+}
+
+.transaction-type-badge.type-loan {
+    background-color: #f39c12; /* Orange */
+}
+
+.transaction-type-badge.type-expence {
+    background-color: #c0392b; /* Dark red/burgundy */
+}
+
+.transaction-type-badge.type-other {
+    background-color: #7f8c8d; /* Gray */
+}
+
+.transaction-type-badge.type-transit {
+    background-color: #16a085; /* Teal */
+}
+
+.transaction-type-badge.type-none {
+    background-color: transparent;
+    color: var(--text-secondary);
+    opacity: 0.5;
+    border: 1px solid var(--border-color);
 }
 

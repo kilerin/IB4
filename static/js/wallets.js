@@ -121,6 +121,7 @@ function displayWallets(wallets) {
                             <img src="/static/ico/eye.svg" class="wallet-icon" alt="Hide">
                         </button>
                         <span class="wallet-name clickable" onclick="openWalletDetails(${wallet.id})" title="Click to view details">${escapeHtml(wallet.name)}</span>
+                        <span class="wallet-address-suffix">...${escapeHtml(wallet.address.slice(-6))}</span>
                         <img src="/static/ico/copy.svg" class="wallet-copy-icon" onclick="event.stopPropagation(); copyToClipboard('${escapeHtml(wallet.address)}'); showNotification('Address copied')" title="Copy address" alt="Copy">
                     </div>
                     <div class="wallet-right">
@@ -423,8 +424,17 @@ function startAmlStatusPolling(walletId) {
             if (attempts >= maxAttempts) {
                 clearInterval(amlCheckIntervals[walletId]);
                 delete amlCheckIntervals[walletId];
-                loadWallets();
-                alert('AML check timeout');
+                
+                // Автоматически сбрасываем флаг проверки при таймауте
+                fetch(`/api/wallets/${walletId}/reset-aml-checking`, {
+                    method: 'POST'
+                }).then(() => {
+                    loadWallets();
+                    alert('AML check timeout - checking flag has been reset');
+                }).catch(() => {
+                    loadWallets();
+                    alert('AML check timeout');
+                });
             }
         } catch (error) {
             console.error('Error polling AML status:', error);
@@ -502,6 +512,34 @@ async function loadTransactions() {
     }
 }
 
+// Get CSS class for transaction type badge
+function getTransactionTypeClass(transactionType) {
+    if (!transactionType) {
+        return 'transaction-type-badge type-none';
+    }
+    
+    const typeMap = {
+        'Sell usdt': 'type-sell-usdt',
+        'Buy usdt': 'type-buy-usdt',
+        'Alex': 'type-alex-deal',
+        'Agent': 'type-agent-deal',
+        'Loan': 'type-loan',
+        'Expence': 'type-expence',
+        'Other': 'type-other',
+        'Transit': 'type-transit'
+    };
+    
+    const typeClass = typeMap[transactionType] || 'type-other';
+    return `transaction-type-badge ${typeClass}`;
+}
+
+// Truncate comment to 20 characters for display
+function truncateComment(comment, maxLength = 20) {
+    if (!comment) return null;
+    if (comment.length <= maxLength) return comment;
+    return comment.substring(0, maxLength) + '...';
+}
+
 // Display transactions
 function displayTransactions(transactions) {
     const tbody = document.getElementById('transactionsTable');
@@ -524,10 +562,6 @@ function displayTransactions(transactions) {
     filteredTransactions.forEach(tx => {
         const row = document.createElement('tr');
         
-        // Get transaction type icon (for CUR column)
-        const txType = tx.type || 'transfer';
-        const typeIcon = `<img src="/static/ico/${txType}.svg" class="currency-icon" alt="${txType}" onerror="this.style.display=\'none\'">`;
-        
         // Currency icon (for AMOUNT column)
         const currencyIcon = tx.currency === 'USDT' 
             ? '<img src="/static/ico/USDT.svg" class="currency-icon" alt="USDT" onerror="this.style.display=\'none\'" style="margin-right: 4px;">'
@@ -548,13 +582,24 @@ function displayTransactions(transactions) {
         const timeStr = date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
         
         row.innerHTML = `
-            <td>${typeIcon}</td>
             <td style="text-align: left;">${currencyIcon}${amount}</td>
             <td>${escapeHtml(tx.wallet_name)}</td>
             <td class="text-muted">${tx.counterparty_name || '-'}</td>
             <td>
-                <span class="transaction-comment" onclick="editTransactionComment(${tx.id}, '${escapeHtml(tx.comment || '')}')" title="Click to edit comment" style="cursor: pointer; display: inline-block; min-width: 100px; padding: 4px 8px; border-radius: 4px; transition: background-color 0.2s;" onmouseover="this.style.backgroundColor='var(--bg-tertiary)'" onmouseout="this.style.backgroundColor='transparent'">
-                    ${tx.comment ? escapeHtml(tx.comment) : '<span class="text-muted" style="opacity: 0.5;">-</span>'}
+                <span class="transaction-type ${getTransactionTypeClass(tx.transaction_type)}" onclick="editTransactionType(${tx.id}, '${escapeHtml(tx.transaction_type || '')}')" title="Click to edit type">
+                    ${tx.transaction_type ? escapeHtml(tx.transaction_type) : '<span class="text-muted" style="opacity: 0.5;">-</span>'}
+                </span>
+            </td>
+            <td>
+                <span class="transaction-comment" 
+                      data-transaction-id="${tx.id}" 
+                      data-comment="${escapeHtmlAttr(tx.comment || '')}" 
+                      onclick="editTransactionCommentFromElement(this)" 
+                      title="${tx.comment && tx.comment.length > 20 ? escapeHtmlAttr(tx.comment) : 'Click to edit comment'}" 
+                      style="cursor: pointer; display: inline-block; min-width: 100px; padding: 4px 8px; border-radius: 4px; transition: background-color 0.2s;" 
+                      onmouseover="this.style.backgroundColor='var(--bg-tertiary)'" 
+                      onmouseout="this.style.backgroundColor='transparent'">
+                    ${tx.comment ? escapeHtml(truncateComment(tx.comment)) : '<span class="text-muted" style="opacity: 0.5;">-</span>'}
                 </span>
             </td>
             <td>
@@ -563,9 +608,6 @@ function displayTransactions(transactions) {
                     <img src="/static/ico/copy.svg" class="copy-icon" onclick="copyToClipboard('${escapeHtml(address)}')" title="Copy address" alt="Copy">
                     <img src="/static/ico/vote.svg" class="copy-icon" onclick="openAddAddressModal('${escapeHtml(address)}')" title="Add to Address Book" alt="Add" style="margin-left: 4px;">
                 ` : ''}
-            </td>
-            <td>
-                <span class="text-muted" style="opacity: 0.5;">🔍</span>
             </td>
             <td>${dateStr} ${timeStr}</td>
         `;
@@ -624,14 +666,25 @@ function formatAmount(num) {
 }
 
 function shortenAddress(address) {
-    if (!address || address.length <= 12) return address;
-    return address.substring(0, 6) + '...' + address.substring(address.length - 6);
+    if (!address || address.length <= 6) return address;
+    return address.substring(0, 2) + '...' + address.substring(address.length - 4);
 }
 
 function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+}
+
+// Escape HTML attribute value (for data attributes, title, etc.)
+function escapeHtmlAttr(text) {
+    if (!text) return '';
+    return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#x27;');
 }
 
 function showNotification(message) {
@@ -741,10 +794,6 @@ async function loadWalletTransactions(walletId) {
         data.transactions.forEach(tx => {
             const row = document.createElement('tr');
             
-            // Get transaction type icon (for CUR column)
-            const txType = tx.type || 'transfer';
-            const typeIcon = `<img src="/static/ico/${txType}.svg" class="currency-icon" alt="${txType}" onerror="this.style.display=\'none\'">`;
-            
             // Currency icon (for AMOUNT column)
             const currencyIcon = tx.currency === 'USDT' 
                 ? '<img src="/static/ico/USDT.svg" class="currency-icon" alt="USDT" onerror="this.style.display=\'none\'" style="margin-right: 4px;">'
@@ -765,7 +814,6 @@ async function loadWalletTransactions(walletId) {
             const timeStr = date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
             
             row.innerHTML = `
-                <td>${typeIcon}</td>
                 <td style="text-align: left;">${currencyIcon}${amount}</td>
                 <td>${tx.direction === 'incoming' ? 'Incoming' : 'Outgoing'}</td>
                 <td>
@@ -1104,14 +1152,60 @@ async function saveAddressFromTransaction(event) {
     }
 }
 
-// Edit transaction comment
-async function editTransactionComment(transactionId, currentComment) {
-    const comment = prompt('Enter comment for this transaction:', currentComment || '');
+let pendingTransactionCommentId = null; // To store the ID of the transaction being edited
+
+// Open transaction comment edit modal
+function openTransactionCommentModal(transactionId, currentComment) {
+    pendingTransactionCommentId = transactionId;
+    const modal = document.getElementById('transactionCommentModal');
+    const input = document.getElementById('transactionCommentInput');
+    const charCount = document.getElementById('commentCharCount');
     
-    if (comment === null) {
-        // User cancelled
+    if (modal && input) {
+        input.value = currentComment || '';
+        updateCommentCharCount();
+        modal.classList.add('active');
+        // Focus on input
+        setTimeout(() => input.focus(), 100);
+    } else {
+        console.error('Transaction comment modal not found');
+    }
+}
+
+// Close transaction comment modal
+function closeTransactionCommentModal() {
+    const modal = document.getElementById('transactionCommentModal');
+    if (modal) {
+        modal.classList.remove('active');
+    }
+    pendingTransactionCommentId = null;
+}
+
+// Update character count
+function updateCommentCharCount() {
+    const input = document.getElementById('transactionCommentInput');
+    const charCount = document.getElementById('commentCharCount');
+    if (input && charCount) {
+        const length = input.value.length;
+        charCount.textContent = `${length} / 500 characters`;
+    }
+}
+
+// Save transaction comment
+async function saveTransactionComment() {
+    if (pendingTransactionCommentId === null) {
+        console.error('No transaction ID pending for comment update.');
         return;
     }
+    
+    const input = document.getElementById('transactionCommentInput');
+    if (!input) {
+        console.error('Comment input not found');
+        return;
+    }
+    
+    const transactionId = pendingTransactionCommentId;
+    const comment = input.value.trim();
     
     try {
         const response = await fetch(`/api/transactions/${transactionId}/comment`, {
@@ -1119,11 +1213,11 @@ async function editTransactionComment(transactionId, currentComment) {
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ comment: comment.trim() })
+            body: JSON.stringify({ comment: comment || null })
         });
         
         if (response.ok) {
-            // Reload transactions to show updated comment
+            closeTransactionCommentModal();
             loadTransactions();
             showNotification('Comment updated');
         } else {
@@ -1135,6 +1229,127 @@ async function editTransactionComment(transactionId, currentComment) {
         alert('Error updating comment');
     }
 }
+
+// Edit transaction comment (opens modal) - called from onclick
+function editTransactionCommentFromElement(element) {
+    if (!element) {
+        console.error('Element not provided to editTransactionCommentFromElement');
+        return;
+    }
+    const transactionId = parseInt(element.getAttribute('data-transaction-id'));
+    const currentComment = element.getAttribute('data-comment') || '';
+    
+    if (isNaN(transactionId)) {
+        console.error('Invalid transaction ID:', element.getAttribute('data-transaction-id'));
+        return;
+    }
+    
+    editTransactionComment(transactionId, currentComment);
+}
+
+// Edit transaction comment (opens modal)
+function editTransactionComment(transactionId, currentComment) {
+    openTransactionCommentModal(transactionId, currentComment);
+}
+
+// Edit transaction type
+// Store current transaction ID for type selection
+let pendingTransactionTypeId = null;
+
+// Open transaction type selection modal
+function editTransactionType(transactionId, currentType) {
+    pendingTransactionTypeId = transactionId;
+    const modal = document.getElementById('transactionTypeModal');
+    if (modal) {
+        modal.classList.add('active');
+        
+        // Highlight current type if exists
+        const buttons = modal.querySelectorAll('button[onclick^="selectTransactionType"]');
+        buttons.forEach(btn => {
+            const typeMatch = btn.getAttribute('onclick').match(/selectTransactionType\('([^']*)'\)/);
+            if (typeMatch && typeMatch[1] === currentType) {
+                btn.style.backgroundColor = 'var(--accent-color)';
+                btn.style.color = 'white';
+            } else {
+                btn.style.backgroundColor = '';
+                btn.style.color = '';
+            }
+        });
+    }
+}
+
+// Close transaction type modal
+function closeTransactionTypeModal() {
+    const modal = document.getElementById('transactionTypeModal');
+    if (modal) {
+        modal.classList.remove('active');
+    }
+    pendingTransactionTypeId = null;
+}
+
+// Select transaction type and save
+async function selectTransactionType(type) {
+    if (!pendingTransactionTypeId) {
+        return;
+    }
+    
+    const transactionType = type || null;
+    
+    try {
+        const response = await fetch(`/api/transactions/${pendingTransactionTypeId}/type`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ transaction_type: transactionType })
+        });
+        
+        if (response.ok) {
+            closeTransactionTypeModal();
+            loadTransactions();
+            showNotification('Transaction type updated');
+        } else {
+            const errorData = await response.json().catch(() => ({}));
+            alert(errorData.error || 'Error updating transaction type');
+        }
+    } catch (error) {
+        console.error('Error updating transaction type:', error);
+        alert('Error updating transaction type');
+    }
+}
+
+// Close modal on outside click
+document.addEventListener('DOMContentLoaded', function() {
+    const transactionTypeModal = document.getElementById('transactionTypeModal');
+    if (transactionTypeModal) {
+        transactionTypeModal.addEventListener('click', function(e) {
+            if (e.target === transactionTypeModal) {
+                closeTransactionTypeModal();
+            }
+        });
+    }
+    
+    // Setup transaction comment modal
+    const transactionCommentModal = document.getElementById('transactionCommentModal');
+    if (transactionCommentModal) {
+        transactionCommentModal.addEventListener('click', function(e) {
+            if (e.target === transactionCommentModal) {
+                closeTransactionCommentModal();
+            }
+        });
+    }
+    
+    // Setup character counter for comment input
+    const commentInput = document.getElementById('transactionCommentInput');
+    if (commentInput) {
+        commentInput.addEventListener('input', updateCommentCharCount);
+        commentInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && e.ctrlKey) {
+                saveTransactionComment();
+            }
+        });
+    }
+});
 
 // Export transactions to Excel
 function exportToExcel() {
@@ -1204,15 +1419,14 @@ function exportToExcel() {
         return {
             'Date': dateStr,
             'Time': timeStr,
-            'Currency': tx.currency,
             'Type': tx.type || 'transfer',
             'Amount': amountNum,  // Number format, not text
             'Direction': tx.direction,
             'Wallet': tx.wallet_name,
             'From/To': tx.counterparty_name || '-',
+            'Transaction Type': tx.transaction_type || '',
             'Comment': tx.comment || '-',
-            'Address': address || '-',
-            'AML Status': tx.aml_status || 'pending'
+            'Address': address || '-'
         };
     });
     
@@ -1224,21 +1438,20 @@ function exportToExcel() {
     const colWidths = [
         { wch: 12 }, // Date
         { wch: 10 }, // Time
-        { wch: 10 }, // Currency
         { wch: 12 }, // Type
         { wch: 15 }, // Amount
         { wch: 10 }, // Direction
         { wch: 20 }, // Wallet
         { wch: 20 }, // From/To
+        { wch: 15 }, // Transaction Type
         { wch: 30 }, // Comment
-        { wch: 40 }, // Address
-        { wch: 12 }  // AML Status
+        { wch: 40 }  // Address
     ];
     ws['!cols'] = colWidths;
     
     // Format Amount column as number with 2 decimal places
     const range = XLSX.utils.decode_range(ws['!ref']);
-    const amountColIndex = 4; // Amount is 5th column (0-indexed: Date=0, Time=1, Currency=2, Type=3, Amount=4)
+    const amountColIndex = 3; // Amount is 4th column (0-indexed: Date=0, Time=1, Type=2, Amount=3)
     
     for (let row = 1; row <= range.e.r; row++) { // Skip header row (row 0)
         const cellAddress = XLSX.utils.encode_cell({ r: row, c: amountColIndex });
