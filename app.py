@@ -1352,16 +1352,21 @@ def refresh_transactions():
     print(f"\n=== REFRESH TRANSACTIONS CALLED ===")
     print(f"Found {len(wallets)} wallets to check")
     
+    # Get ALL existing transaction hashes with wallet_id to avoid duplicates
+    # Check by combination of tx_hash + wallet_id to prevent duplicates for the same wallet
+    all_existing_tx_keys = set(
+        (tx.tx_hash, tx.wallet_id) for tx in Transaction.query.filter(Transaction.tx_hash.isnot(None)).all()
+        if tx.tx_hash
+    )
+    print(f"Found {len(all_existing_tx_keys)} existing transactions in database")
+    
     for wallet in wallets:
         try:
             address = wallet.address
             print(f"\n=== Getting transactions for {wallet.name} ({address}) ===")
             
-            # Get existing transaction hashes to avoid duplicates
-            existing_hashes = set(
-                tx.tx_hash for tx in Transaction.query.filter_by(wallet_id=wallet.id).all() 
-                if tx.tx_hash
-            )
+            # Check for duplicates by (tx_hash, wallet_id) combination
+            # This prevents adding the same transaction multiple times for the same wallet
             
             # Get TRC20 (USDT) transactions
             try:
@@ -1381,7 +1386,9 @@ def refresh_transactions():
                     if trc20_data.get('data'):
                         for tx_data in trc20_data['data']:
                             tx_hash = tx_data.get('transaction_id')
-                            if tx_hash and tx_hash not in existing_hashes:
+                            # Check if this transaction already exists for this wallet
+                            tx_key = (tx_hash, wallet.id)
+                            if tx_hash and tx_key not in all_existing_tx_keys:
                                 # Parse transaction
                                 from_addr = tx_data.get('from', '')
                                 to_addr = tx_data.get('to', '')
@@ -1512,7 +1519,8 @@ def refresh_transactions():
                                     created_at=tx_datetime
                                 )
                                 db.session.add(transaction)
-                                existing_hashes.add(tx_hash)
+                                # Add to set to prevent duplicates
+                                all_existing_tx_keys.add(tx_key)
                                 new_count += 1
                                 print(f"Added USDT transaction: {tx_hash[:16]}... {amount} USDT ({direction})")
             except Exception as e:
@@ -1536,7 +1544,9 @@ def refresh_transactions():
                     if trx_data.get('data'):
                         for tx_data in trx_data['data']:
                             tx_hash = tx_data.get('txID') or tx_data.get('transaction_id')
-                            if tx_hash and tx_hash not in existing_hashes:
+                            # Check if this transaction already exists for this wallet
+                            tx_key = (tx_hash, wallet.id)
+                            if tx_hash and tx_key not in all_existing_tx_keys:
                                 # Parse transaction
                                 raw_data = tx_data.get('raw_data', {})
                                 contracts = raw_data.get('contract', [])
@@ -1623,7 +1633,8 @@ def refresh_transactions():
                                             created_at=tx_datetime
                                         )
                                         db.session.add(transaction)
-                                        existing_hashes.add(tx_hash)
+                                        # Add to set to prevent duplicates
+                                        all_existing_tx_keys.add(tx_key)
                                         new_count += 1
                                         print(f"Added TRX transaction: {tx_hash[:16]}... {amount} TRX ({direction}, {transaction_type})")
                                         transaction_processed = True
@@ -1657,7 +1668,8 @@ def refresh_transactions():
                                             created_at=tx_datetime
                                         )
                                         db.session.add(transaction)
-                                        existing_hashes.add(tx_hash)
+                                        # Add to set to prevent duplicates
+                                        all_existing_tx_keys.add(tx_key)
                                         new_count += 1
                                         print(f"Added TRX transaction: {tx_hash[:16]}... {amount} TRX (freeze)")
                                         transaction_processed = True
@@ -1690,7 +1702,8 @@ def refresh_transactions():
                                             created_at=tx_datetime
                                         )
                                         db.session.add(transaction)
-                                        existing_hashes.add(tx_hash)
+                                        # Add to set to prevent duplicates
+                                        all_existing_tx_keys.add(tx_key)
                                         new_count += 1
                                         print(f"Added TRX transaction: {tx_hash[:16]}... (unfreeze)")
                                         transaction_processed = True
@@ -1722,7 +1735,8 @@ def refresh_transactions():
                                             created_at=tx_datetime
                                         )
                                         db.session.add(transaction)
-                                        existing_hashes.add(tx_hash)
+                                        # Add to set to prevent duplicates
+                                        all_existing_tx_keys.add(tx_key)
                                         new_count += 1
                                         print(f"Added TRX transaction: {tx_hash[:16]}... (vote)")
                                         transaction_processed = True
@@ -1754,7 +1768,8 @@ def refresh_transactions():
                                             created_at=tx_datetime
                                         )
                                         db.session.add(transaction)
-                                        existing_hashes.add(tx_hash)
+                                        # Add to set to prevent duplicates
+                                        all_existing_tx_keys.add(tx_key)
                                         new_count += 1
                                         print(f"Added TRX transaction: {tx_hash[:16]}... (withdraw)")
                                         transaction_processed = True
@@ -1786,7 +1801,8 @@ def refresh_transactions():
                                             created_at=tx_datetime
                                         )
                                         db.session.add(transaction)
-                                        existing_hashes.add(tx_hash)
+                                        # Add to set to prevent duplicates
+                                        all_existing_tx_keys.add(tx_key)
                                         new_count += 1
                                         print(f"Added TRX transaction: {tx_hash[:16]}... (contract_execution)")
                                         transaction_processed = True
