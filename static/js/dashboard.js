@@ -36,6 +36,14 @@ document.addEventListener('DOMContentLoaded', function() {
             loadTransactionTypesData();
         });
     }
+    
+    // Add event listener for export Excel button
+    const exportExcelBtn = document.getElementById('exportExcelBtn');
+    if (exportExcelBtn) {
+        exportExcelBtn.addEventListener('click', function() {
+            exportToExcel();
+        });
+    }
 });
 
 async function loadDashboardData() {
@@ -165,6 +173,25 @@ function formatAmountShort(amount) {
         const thousands = millions * 1000;
         return Math.round(thousands) + 'K';
     }
+}
+
+// Export to Excel function
+function exportToExcel() {
+    const filter = document.getElementById('transactionTypeFilter');
+    const periodFilter = document.getElementById('periodFilter');
+    const transactionType = filter ? filter.value : '';
+    const period = periodFilter ? periodFilter.value : '365';
+    
+    // Build URL with parameters
+    const url = `/api/dashboard/export-excel?transaction_type=${encodeURIComponent(transactionType)}&period=${encodeURIComponent(period)}`;
+    
+    // Create a temporary link and trigger download
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = '';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
 }
 
 // Load transaction types data

@@ -1,4 +1,4 @@
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, render_template, jsonify, request, send_file
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import func
 from datetime import datetime, timedelta
@@ -7,6 +7,9 @@ import requests
 import threading
 import time
 from dotenv import load_dotenv
+from openpyxl import Workbook
+from openpyxl.styles import Font, Alignment
+from io import BytesIO
 
 load_dotenv()  # Загружает переменные из .env файла
 
@@ -1025,6 +1028,111 @@ def get_weekly_stats():
         'delta': delta,
         'transaction_type': transaction_type
     })
+
+@app.route('/api/dashboard/export-excel', methods=['GET'])
+def export_weekly_stats_excel():
+    """Export weekly statistics to Excel file"""
+    from collections import defaultdict
+    
+    transaction_type = request.args.get('transaction_type', '')
+    period_days = request.args.get('period', '365')
+    
+    try:
+        period_days = int(period_days)
+        period_days = max(1, min(period_days, 730))
+    except (ValueError, TypeError):
+        period_days = 365
+    
+    # Calculate date range
+    end_date = datetime.utcnow()
+    start_date = end_date - timedelta(days=period_days)
+    
+    # Query transactions filtered by type and date range
+    query = Transaction.query.filter(
+        Transaction.created_at >= start_date,
+        Transaction.created_at <= end_date,
+        Transaction.currency == 'USDT'
+    ).order_by(Transaction.created_at)
+    
+    if transaction_type and transaction_type.strip():
+        query = query.filter(Transaction.transaction_type == transaction_type)
+    
+    transactions = query.all()
+    
+    # Group transactions by date (day)
+    daily_data = defaultdict(lambda: {'in': 0.0, 'out': 0.0})
+    
+    for tx in transactions:
+        # Get date without time
+        tx_date = tx.created_at.date()
+        date_key = tx_date.strftime('%Y-%m-%d')
+        
+        if tx.direction == 'incoming':
+            daily_data[date_key]['in'] += tx.amount
+        elif tx.direction == 'outgoing':
+            daily_data[date_key]['out'] += tx.amount
+    
+    # Create Excel workbook
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Transactions"
+    
+    # Set headers
+    headers = ['DATE', 'IN', 'OUT', 'SALDO']
+    ws.append(headers)
+    
+    # Style headers
+    header_font = Font(bold=True)
+    header_alignment = Alignment(horizontal='center')
+    for cell in ws[1]:
+        cell.font = header_font
+        cell.alignment = header_alignment
+    
+    # Calculate cumulative balance (SALDO)
+    cumulative_balance = 0.0
+    
+    # Sort dates and add data
+    sorted_dates = sorted(daily_data.keys())
+    for date_key in sorted_dates:
+        date_obj = datetime.strptime(date_key, '%Y-%m-%d').date()
+        date_str = date_obj.strftime('%Y-%m-%d')
+        
+        in_amount = daily_data[date_key]['in']
+        out_amount = daily_data[date_key]['out']
+        
+        # Calculate SALDO as cumulative difference
+        cumulative_balance += (in_amount - out_amount)
+        
+        ws.append([
+            date_str,
+            round(in_amount, 2),
+            round(out_amount, 2),
+            round(cumulative_balance, 2)
+        ])
+    
+    # Auto-adjust column widths
+    ws.column_dimensions['A'].width = 12
+    ws.column_dimensions['B'].width = 15
+    ws.column_dimensions['C'].width = 15
+    ws.column_dimensions['D'].width = 15
+    
+    # Create file in memory
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    
+    # Generate filename based on transaction type
+    if transaction_type and transaction_type.strip():
+        filename = f"{transaction_type.replace(' ', '_')}.xlsx"
+    else:
+        filename = "All_Types.xlsx"
+    
+    return send_file(
+        output,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        as_attachment=True,
+        download_name=filename
+    )
 
 @app.route('/api/dashboard/transaction-types', methods=['GET'])
 def get_transaction_types_stats():
