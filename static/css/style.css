@@ -552,6 +552,9 @@ tbody tr:hover {
 /* Address formatting */
 .address-short {
     font-size: 12px;
+    font-family: 'Courier New', Courier, 'Lucida Console', Monaco, monospace;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.5px;
 }
 
 .copy-icon {
@@ -586,7 +589,13 @@ tbody tr:hover {
 .address-full {
     flex: 1;
     word-break: break-all;
+    font-family: 'Courier New', Courier, 'Lucida Console', Monaco, monospace;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.5px;
 }
+    font-family: 'Courier New', Courier, 'Lucida Console', Monaco, monospace;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.5px;
 
 .wallet-details-content {
     margin-bottom: 20px;
