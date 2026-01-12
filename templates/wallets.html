@@ -81,13 +81,17 @@
         <table>
             <thead>
                 <tr>
-                    <th>AMOUNT</th>
+                    <th class="sortable" data-sort="amount" style="cursor: pointer;">
+                        AMOUNT <span class="sort-indicator"></span>
+                    </th>
                     <th>WALLET</th>
                     <th>FROM/TO</th>
                     <th>TYPE</th>
                     <th>COMMENT</th>
                     <th>ADDRESS</th>
-                    <th>DATE/TIME</th>
+                    <th class="sortable" data-sort="date" style="cursor: pointer;">
+                        DATE/TIME <span class="sort-indicator"></span>
+                    </th>
                 </tr>
             </thead>
             <tbody id="transactionsTable">

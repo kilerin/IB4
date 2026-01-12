@@ -1,18 +1,88 @@
 {% extends "base.html" %}
 
+{% block extra_head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+{% endblock %}
+
 {% block content %}
 <div class="page-header">
     <h1>Dashboard</h1>
-    <p>Overview of your crypto wallets and transactions</p>
 </div>
 
 <div class="card">
-    <div class="empty-state">
-        <div class="empty-state-icon">📊</div>
-        <h2>Dashboard Coming Soon</h2>
-        <p>This section will display analytics and overview statistics.</p>
+    <div class="card-header">
+        <h2 class="card-title">Weekly Statistics</h2>
+        <div class="dashboard-header-content">
+            <div class="dashboard-stats">
+                <div class="stat-card">
+                    <div class="stat-label">Total In</div>
+                    <div class="stat-value" id="totalIn">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Total Out</div>
+                    <div class="stat-value" id="totalOut">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Delta</div>
+                    <div class="stat-value" id="delta">0</div>
+                </div>
+            </div>
+            <div class="dashboard-controls">
+                <label for="periodFilter" class="form-label" style="margin-right: 10px;">Period:</label>
+                <select id="periodFilter" class="form-input" style="width: 150px; padding: 6px 10px; margin-right: 20px;">
+                    <option value="30">Last Month</option>
+                    <option value="90">Last 3 Months</option>
+                    <option value="180">Last 6 Months</option>
+                    <option value="365" selected>Last Year</option>
+                </select>
+                <label for="transactionTypeFilter" class="form-label" style="margin-right: 10px;">Transaction Type:</label>
+                <select id="transactionTypeFilter" class="form-input" style="width: 200px; padding: 6px 10px;">
+                    <option value="Alex">Alex</option>
+                    <option value="Sell usdt">Sell usdt</option>
+                    <option value="Buy usdt">Buy usdt</option>
+                    <option value="Agent">Agent</option>
+                    <option value="Loan">Loan</option>
+                    <option value="Expence">Expence</option>
+                    <option value="Other">Other</option>
+                    <option value="Transit">Transit</option>
+                    <option value="" selected>All Types</option>
+                </select>
+            </div>
+        </div>
+    </div>
+    
+    <div style="margin-top: 30px;">
+        <canvas id="weeklyChart"></canvas>
+    </div>
+</div>
+
+<div class="card" style="margin-top: 20px;">
+    <div class="card-header">
+        <h2 class="card-title">Transaction Types Statistics</h2>
+        <div class="dashboard-header-content">
+            <div class="dashboard-controls">
+                <label for="typePeriodFilter" class="form-label" style="margin-right: 10px;">Period:</label>
+                <select id="typePeriodFilter" class="form-input" style="width: 150px; padding: 6px 10px; margin-right: 20px;">
+                    <option value="30">Last Month</option>
+                    <option value="90">Last 3 Months</option>
+                    <option value="180">Last 6 Months</option>
+                    <option value="365" selected>Last Year</option>
+                </select>
+                <label for="directionFilter" class="form-label" style="margin-right: 10px;">Direction:</label>
+                <select id="directionFilter" class="form-input" style="width: 150px; padding: 6px 10px;">
+                    <option value="incoming" selected>Incoming</option>
+                    <option value="outgoing">Outgoing</option>
+                </select>
+            </div>
+        </div>
+    </div>
+    
+    <div style="margin-top: 30px;">
+        <canvas id="transactionTypesChart"></canvas>
     </div>
 </div>
 {% endblock %}
 
-
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+{% endblock %}

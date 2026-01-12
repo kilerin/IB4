@@ -1,14 +1,32 @@
 from flask import Flask, render_template, jsonify, request
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import func
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 import requests
 import threading
 import time
+from dotenv import load_dotenv
+
+load_dotenv()  # Загружает переменные из .env файла
 
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///crypto_deck.db'
+
+# Поддержка PostgreSQL через переменную окружения, fallback на SQLite для разработки
+database_url = os.getenv('DATABASE_URL')
+if database_url:
+    app.config['SQLALCHEMY_DATABASE_URI'] = database_url
+    # Настройки пула соединений для PostgreSQL
+    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+        'pool_pre_ping': True,
+        'pool_recycle': 300,
+        'pool_size': 10,
+        'max_overflow': 20
+    }
+else:
+    # Для локальной разработки используем SQLite
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///crypto_deck.db'
+
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
@@ -72,6 +90,8 @@ class AmlCheck(db.Model):
     risk_score = db.Column(db.Float, nullable=True)  # 0.0-100.0
     customer = db.Column(db.String(200), nullable=True)  # From address book
     manager = db.Column(db.String(100), default='N4')
+    balance_usdt = db.Column(db.Float, nullable=True, default=0.0)
+    balance_trx = db.Column(db.Float, nullable=True, default=0.0)
     checked_at = db.Column(db.DateTime, default=datetime.utcnow)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -553,6 +573,10 @@ def perform_aml_check_async(wallet_id):
                         if address_entry:
                             customer = address_entry.customer
                         
+                        # Используем текущие балансы кошелька
+                        balance_usdt = wallet.balance_usdt or 0.0
+                        balance_trx = wallet.balance_trx or 0.0
+                        
                         # Сохраняем результат проверки в таблицу AmlCheck
                         aml_check = AmlCheck(
                             address=wallet.address,
@@ -560,6 +584,8 @@ def perform_aml_check_async(wallet_id):
                             risk_score=aml_score,
                             customer=customer,
                             manager='N4',
+                            balance_usdt=balance_usdt,
+                            balance_trx=balance_trx,
                             checked_at=datetime.utcnow()
                         )
                         db.session.add(aml_check)
@@ -678,6 +704,68 @@ def perform_aml_check_for_address(address, manager='N4'):
                     if address_entry:
                         customer = address_entry.customer
                     
+                    # Получаем балансы USDT и TRX из TronGrid API
+                    balance_usdt = 0.0
+                    balance_trx = 0.0
+                    try:
+                        TRONGRID_API_KEY = 'edccd59a-8c06-40a5-b5eb-41cc161009c5'
+                        TRONGRID_API_URL = 'https://api.trongrid.io'
+                        USDT_TRC20_CONTRACT = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t'
+                        
+                        headers = {
+                            'TRON-PRO-API-KEY': TRONGRID_API_KEY
+                        }
+                        
+                        # Get TRX balance
+                        trx_response = requests.get(
+                            f'{TRONGRID_API_URL}/v1/accounts/{address}',
+                            headers=headers,
+                            timeout=10
+                        )
+                        if trx_response.status_code == 200:
+                            account_data = trx_response.json()
+                            if account_data.get('data') and len(account_data['data']) > 0:
+                                balance_sun = account_data['data'][0].get('balance', 0)
+                                balance_trx = round(balance_sun / 1_000_000, 2)  # Convert from sun to TRX
+                        
+                        # Get USDT balance using tronpy library approach
+                        try:
+                            import base58
+                            from tronpy import Tron
+                            from tronpy.keys import PrivateKey
+                            
+                            tron = Tron(network='mainnet')
+                            contract = tron.get_contract(USDT_TRC20_CONTRACT)
+                            
+                            # Convert address to hex
+                            address_bytes = base58.b58decode_check(address)
+                            address_hex = '0x' + address_bytes.hex()
+                            
+                            # Call balanceOf function
+                            result = contract.functions.balanceOf(address_hex)
+                            balance_usdt = round(result / 1_000_000, 2)  # USDT has 6 decimals
+                        except Exception as e:
+                            print(f"Error getting USDT balance with tronpy for {address}: {str(e)}")
+                            # Fallback: try direct API call
+                            try:
+                                usdt_response = requests.get(
+                                    f'{TRONGRID_API_URL}/v1/accounts/{address}/tokens',
+                                    headers=headers,
+                                    params={'contract_address': USDT_TRC20_CONTRACT},
+                                    timeout=10
+                                )
+                                if usdt_response.status_code == 200:
+                                    usdt_data = usdt_response.json()
+                                    if usdt_data and len(usdt_data) > 0:
+                                        for token in usdt_data:
+                                            if token.get('token_address') == USDT_TRC20_CONTRACT:
+                                                balance_usdt = round(float(token.get('balance', 0)) / 1_000_000, 2)
+                                                break
+                            except Exception as e2:
+                                print(f"Error getting USDT balance via API for {address}: {str(e2)}")
+                    except Exception as e:
+                        print(f"Error fetching balances for {address}: {str(e)}")
+                    
                     # Сохраняем результат проверки
                     aml_check = AmlCheck(
                         address=address,
@@ -685,6 +773,8 @@ def perform_aml_check_for_address(address, manager='N4'):
                         risk_score=aml_score,
                         customer=customer,
                         manager=manager,
+                        balance_usdt=balance_usdt,
+                        balance_trx=balance_trx,
                         checked_at=datetime.utcnow()
                     )
                     db.session.add(aml_check)
@@ -750,19 +840,45 @@ def perform_aml_check_for_address_async(address, manager):
 @app.route('/api/aml-check', methods=['GET'])
 def get_aml_checks():
     """Получить список всех AML проверок"""
-    checks = AmlCheck.query.order_by(AmlCheck.checked_at.desc()).all()
-    
-    return jsonify({
-        'checks': [{
-            'id': check.id,
-            'address': check.address,
-            'risk_level': check.risk_level,
-            'risk_score': check.risk_score,
-            'customer': check.customer,
-            'manager': check.manager,
-            'checked_at': check.checked_at.isoformat() if check.checked_at else None
-        } for check in checks]
-    })
+    try:
+        checks = AmlCheck.query.order_by(AmlCheck.checked_at.desc()).all()
+        
+        result_checks = []
+        for check in checks:
+            # Safely get balance fields (they might not exist in old records or DB schema)
+            balance_usdt = 0.0
+            balance_trx = 0.0
+            try:
+                # Use getattr with default value to avoid AttributeError
+                balance_usdt = getattr(check, 'balance_usdt', None) or 0.0
+            except (AttributeError, KeyError):
+                balance_usdt = 0.0
+            
+            try:
+                balance_trx = getattr(check, 'balance_trx', None) or 0.0
+            except (AttributeError, KeyError):
+                balance_trx = 0.0
+            
+            result_checks.append({
+                'id': check.id,
+                'address': check.address,
+                'risk_level': check.risk_level,
+                'risk_score': check.risk_score,
+                'customer': check.customer,
+                'manager': check.manager,
+                'balance_usdt': float(balance_usdt) if balance_usdt is not None else 0.0,
+                'balance_trx': float(balance_trx) if balance_trx is not None else 0.0,
+                'checked_at': check.checked_at.isoformat() if check.checked_at else None
+            })
+        
+        return jsonify({
+            'checks': result_checks
+        })
+    except Exception as e:
+        print(f"Error in get_aml_checks: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e), 'message': 'Failed to load AML checks'}), 500
 
 @app.route('/api/wallets/<int:wallet_id>/aml-check', methods=['POST'])
 def check_aml(wallet_id):
@@ -811,6 +927,235 @@ def reset_aml_checking(wallet_id):
             'success': False,
             'message': 'Wallet is not in checking state'
         }), 400
+
+@app.route('/api/dashboard/weekly-stats', methods=['GET'])
+def get_weekly_stats():
+    """Get weekly statistics for the last 3 months filtered by transaction type"""
+    from datetime import datetime, timedelta
+    from sqlalchemy import func, extract
+    
+    transaction_type = request.args.get('transaction_type', '')
+    period_days = request.args.get('period', '365')
+    
+    try:
+        period_days = int(period_days)
+        # Limit period to reasonable range (1 day to 2 years)
+        period_days = max(1, min(period_days, 730))
+    except (ValueError, TypeError):
+        period_days = 90
+    
+    # Calculate date range based on selected period
+    end_date = datetime.utcnow()
+    start_date = end_date - timedelta(days=period_days)
+    
+    # Generate all weeks in the date range
+    # Start from the Monday of the week containing start_date
+    days_since_monday = start_date.weekday()
+    first_week_start = start_date - timedelta(days=days_since_monday)
+    first_week_start = first_week_start.replace(hour=0, minute=0, second=0, microsecond=0)
+    
+    # Initialize all weeks with zeros
+    weekly_data = {}
+    current_week_start = first_week_start
+    while current_week_start <= end_date:
+        week_key = current_week_start.strftime('%Y-%m-%d')
+        weekly_data[week_key] = {
+            'week_start': current_week_start,
+            'incoming': 0.0,
+            'outgoing': 0.0
+        }
+        # Move to next week (add 7 days)
+        current_week_start += timedelta(days=7)
+    
+    # Query transactions filtered by type and date range
+    query = Transaction.query.filter(
+        Transaction.created_at >= start_date,
+        Transaction.created_at <= end_date,
+        Transaction.currency == 'USDT'  # Only USDT transactions
+    )
+    
+    if transaction_type and transaction_type.strip():
+        query = query.filter(Transaction.transaction_type == transaction_type)
+    
+    transactions = query.all()
+    
+    # Fill in transaction data
+    total_in = 0.0
+    total_out = 0.0
+    
+    for tx in transactions:
+        # Get week start date (Monday)
+        # weekday() returns 0 for Monday, 6 for Sunday
+        days_since_monday = tx.created_at.weekday()
+        week_start = tx.created_at - timedelta(days=days_since_monday)
+        # Set time to start of day
+        week_start = week_start.replace(hour=0, minute=0, second=0, microsecond=0)
+        week_key = week_start.strftime('%Y-%m-%d')
+        
+        # Only process if week is in our range
+        if week_key in weekly_data:
+            if tx.direction == 'incoming':
+                weekly_data[week_key]['incoming'] += tx.amount
+                total_in += tx.amount
+            elif tx.direction == 'outgoing':
+                weekly_data[week_key]['outgoing'] += tx.amount
+                total_out += tx.amount
+    
+    # Convert to list sorted by week
+    weeks = []
+    for week_key in sorted(weekly_data.keys()):
+        week_data = weekly_data[week_key]
+        # Get week number in year (ISO week number)
+        week_number = week_data['week_start'].isocalendar()[1]
+        week_label = f"W{week_number}"
+        
+        weeks.append({
+            'week': week_data['week_start'].strftime('%Y-%m-%d'),
+            'week_label': week_label,
+            'incoming': round(week_data['incoming'], 2),
+            'outgoing': round(week_data['outgoing'], 2)
+        })
+    
+    delta = round(total_in - total_out, 2)
+    
+    return jsonify({
+        'weeks': weeks,
+        'total_in': round(total_in, 2),
+        'total_out': round(total_out, 2),
+        'delta': delta,
+        'transaction_type': transaction_type
+    })
+
+@app.route('/api/dashboard/transaction-types', methods=['GET'])
+def get_transaction_types_stats():
+    """Get statistics by transaction types for the selected period"""
+    period_days = request.args.get('period', '365')
+    direction = request.args.get('direction', 'incoming')  # incoming or outgoing
+    
+    try:
+        period_days = int(period_days)
+        # Limit period to reasonable range (1 day to 2 years)
+        period_days = max(1, min(period_days, 730))
+    except (ValueError, TypeError):
+        period_days = 365
+    
+    if direction not in ['incoming', 'outgoing']:
+        direction = 'incoming'
+    
+    # Calculate date range based on selected period
+    end_date = datetime.utcnow()
+    start_date = end_date - timedelta(days=period_days)
+    
+    # Query transactions filtered by date range and direction
+    query = Transaction.query.filter(
+        Transaction.created_at >= start_date,
+        Transaction.created_at <= end_date,
+        Transaction.currency == 'USDT',
+        Transaction.direction == direction
+    )
+    
+    transactions = query.all()
+    
+    # Group by transaction type
+    type_stats = {}
+    for tx in transactions:
+        tx_type = tx.transaction_type if tx.transaction_type else '(None)'
+        if tx_type not in type_stats:
+            type_stats[tx_type] = 0.0
+        type_stats[tx_type] += tx.amount
+    
+    # Convert to list sorted by amount (descending)
+    types_list = []
+    for tx_type, amount in sorted(type_stats.items(), key=lambda x: x[1], reverse=True):
+        types_list.append({
+            'type': tx_type,
+            'amount': round(amount, 2)
+        })
+    
+    return jsonify({
+        'types': types_list,
+        'direction': direction
+    })
+
+@app.route('/api/dashboard/daily-balances', methods=['GET'])
+def get_daily_balances():
+    """Get daily balances at end of day (24:00) for all wallets"""
+    period_days = request.args.get('period', '90')
+    
+    try:
+        period_days = int(period_days)
+        # Limit period to reasonable range (1 day to 2 years)
+        period_days = max(1, min(period_days, 730))
+    except (ValueError, TypeError):
+        period_days = 90
+    
+    # Calculate date range
+    end_date = datetime.utcnow()
+    start_date = end_date - timedelta(days=period_days)
+    
+    # Get current balances for all wallets
+    wallets = Wallet.query.filter_by(is_hidden=False).all()
+    current_balances = {}
+    for wallet in wallets:
+        current_balances[wallet.id] = {
+            'usdt': wallet.balance_usdt or 0.0,
+            'trx': wallet.balance_trx or 0.0
+        }
+    
+    # Generate all days in the period
+    daily_balances = {}
+    current_day = start_date.replace(hour=0, minute=0, second=0, microsecond=0)
+    
+    while current_day <= end_date:
+        day_key = current_day.strftime('%Y-%m-%d')
+        daily_balances[day_key] = {
+            'date': current_day.strftime('%Y-%m-%d'),
+            'date_label': current_day.strftime('%d.%m'),
+            'usdt': 0.0,
+            'trx': 0.0
+        }
+        current_day += timedelta(days=1)
+    
+    # Calculate balances for each day by working backwards from current balances
+    # For each day, subtract transactions that happened after that day
+    for day_key in sorted(daily_balances.keys(), reverse=True):
+        day_date = datetime.strptime(day_key, '%Y-%m-%d')
+        day_end = day_date.replace(hour=23, minute=59, second=59, microsecond=999999)
+        
+        # Initialize with current balances
+        day_balances_usdt = sum(b['usdt'] for b in current_balances.values())
+        day_balances_trx = sum(b['trx'] for b in current_balances.values())
+        
+        # Find all transactions after this day
+        transactions_after = Transaction.query.filter(
+            Transaction.created_at > day_end,
+            Transaction.created_at <= end_date
+        ).all()
+        
+        # Reverse calculate: subtract incoming, add outgoing
+        for tx in transactions_after:
+            if tx.currency == 'USDT':
+                if tx.direction == 'incoming':
+                    day_balances_usdt -= tx.amount
+                elif tx.direction == 'outgoing':
+                    day_balances_usdt += tx.amount
+            elif tx.currency == 'TRX':
+                if tx.direction == 'incoming':
+                    day_balances_trx -= tx.amount
+                elif tx.direction == 'outgoing':
+                    day_balances_trx += tx.amount
+        
+        daily_balances[day_key]['usdt'] = max(0.0, round(day_balances_usdt, 2))
+        daily_balances[day_key]['trx'] = max(0.0, round(day_balances_trx, 2))
+    
+    # Convert to list sorted by date
+    days = []
+    for day_key in sorted(daily_balances.keys()):
+        days.append(daily_balances[day_key])
+    
+    return jsonify({
+        'days': days
+    })
 
 @app.route('/api/transactions', methods=['GET'])
 def get_transactions():

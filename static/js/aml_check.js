@@ -38,11 +38,16 @@ function displayAmlChecks(checks) {
         const riskLevel = check.risk_level ? check.risk_level.toUpperCase() : 'N/A';
         const riskLevelClass = `risk-level-${(check.risk_level || 'undefined').toLowerCase()}`;
         
+        const balanceUsdt = check.balance_usdt !== null && check.balance_usdt !== undefined ? formatAmount(check.balance_usdt) : '-';
+        const balanceTrx = check.balance_trx !== null && check.balance_trx !== undefined ? formatAmount(check.balance_trx) : '-';
+        
         row.innerHTML = `
             <td><span class="risk-level ${riskLevelClass}">${riskLevel}</span></td>
             <td>${check.risk_score !== null ? check.risk_score.toFixed(1) + '%' : 'N/A'}</td>
             <td><span class="address-short">${shortenAddress(check.address)}</span></td>
             <td>${check.customer || '-'}</td>
+            <td>${balanceUsdt}</td>
+            <td>${balanceTrx}</td>
             <td>${dateStr} ${timeStr}</td>
             <td>${check.manager || 'N4'}</td>
         `;
@@ -66,11 +71,16 @@ function displayAmlChecks(checks) {
             
             checkingRow.id = '';
             checkingRow.dataset.address = '';
+            const balanceUsdt = completedCheck.balance_usdt !== null && completedCheck.balance_usdt !== undefined ? formatAmount(completedCheck.balance_usdt) : '-';
+            const balanceTrx = completedCheck.balance_trx !== null && completedCheck.balance_trx !== undefined ? formatAmount(completedCheck.balance_trx) : '-';
+            
             checkingRow.innerHTML = `
                 <td><span class="risk-level ${riskLevelClass}">${riskLevel}</span></td>
                 <td>${completedCheck.risk_score !== null ? completedCheck.risk_score.toFixed(1) + '%' : 'N/A'}</td>
                 <td><span class="address-short">${shortenAddress(completedCheck.address)}</span></td>
                 <td>${completedCheck.customer || '-'}</td>
+                <td>${balanceUsdt}</td>
+                <td>${balanceTrx}</td>
                 <td>${dateStr} ${timeStr}</td>
                 <td>${completedCheck.manager || 'N4'}</td>
             `;
@@ -79,7 +89,7 @@ function displayAmlChecks(checks) {
     
     // Show empty message if no checks and no checking rows
     if (tbody.children.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" class="text-muted" style="text-align: center; padding: 40px;">No checks found</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" class="text-muted" style="text-align: center; padding: 40px;">No checks found</td></tr>';
     }
 }
 
@@ -131,6 +141,8 @@ async function checkAddress(event) {
         </td>
         <td>-</td>
         <td><span class="address-short">${shortenAddress(address)}</span></td>
+        <td>-</td>
+        <td>-</td>
         <td>-</td>
         <td>${dateStr} ${timeStr}</td>
         <td>N4</td>
@@ -188,6 +200,14 @@ async function checkAddress(event) {
 function shortenAddress(address) {
     if (!address || address.length < 12) return address;
     return address.substring(0, 6) + '...' + address.substring(address.length - 6);
+}
+
+function formatAmount(amount) {
+    if (amount === null || amount === undefined || amount === '-') return '-';
+    return parseFloat(amount).toLocaleString('ru-RU', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    });
 }
 
 function showNotification(message) {

@@ -1,0 +1,75 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: ib4deck_db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-crypto_deck}
+      POSTGRES_USER: ${POSTGRES_USER:-crypto_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_this_password}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backups:/backups
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-crypto_user}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - ib4deck_network
+
+  web:
+    build: .
+    container_name: ib4deck_web
+    command: >
+      sh -c "echo 'Waiting for database...' &&
+             python -c 'import time; time.sleep(5)' &&
+             echo 'Creating tables...' &&
+             python -c 'from app import db, app; app.app_context().push(); db.create_all()' &&
+             echo 'Starting Gunicorn...' &&
+             gunicorn --bind 0.0.0.0:5001 --workers 3 --timeout 120 --access-logfile - --error-logfile - app:app"
+    volumes:
+      - .:/app
+      - static_volume:/app/static
+    ports:
+      - "5001:5001"
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-crypto_user}:${POSTGRES_PASSWORD:-change_this_password}@db:5432/${POSTGRES_DB:-crypto_deck}
+      - FLASK_ENV=production
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - ib4deck_network
+
+  nginx:
+    image: nginx:alpine
+    container_name: ib4deck_nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./static:/app/static:ro
+      - ./ssl:/etc/nginx/ssl:ro  # Для SSL сертификатов (создайте директорию если нужно)
+    depends_on:
+      - web
+    restart: unless-stopped
+    networks:
+      - ib4deck_network
+
+volumes:
+  postgres_data:
+    driver: local
+  static_volume:
+    driver: local
+
+networks:
+  ib4deck_network:
+    driver: bridge
+

@@ -1,4 +1,5 @@
 let sortableInstance = null;
+let currentSort = { field: null, direction: 'asc' }; // 'asc' or 'desc'
 
 // Load wallets on page load
 document.addEventListener('DOMContentLoaded', function() {
@@ -25,6 +26,19 @@ document.addEventListener('DOMContentLoaded', function() {
     loadTransactions();
     loadReserves();
     updateHiddenToggleIcon();
+    
+    // Add sort handlers using event delegation (table is loaded dynamically)
+    const transactionsTable = document.getElementById('transactionsTable');
+    if (transactionsTable && transactionsTable.closest('table')) {
+        const table = transactionsTable.closest('table');
+        table.addEventListener('click', function(e) {
+            const header = e.target.closest('th.sortable');
+            if (header) {
+                const sortField = header.getAttribute('data-sort');
+                sortTransactions(sortField);
+            }
+        });
+    }
     
     // Close modals when clicking outside
     const addAddressModal = document.getElementById('addAddressModal');
@@ -554,6 +568,11 @@ function displayTransactions(transactions) {
         filteredTransactions = transactions.filter(tx => tx.comment !== 'Own fund transfer');
     }
     
+    // Sort transactions if sort is active
+    if (currentSort.field) {
+        filteredTransactions = sortTransactionsArray(filteredTransactions, currentSort.field, currentSort.direction);
+    }
+    
     if (filteredTransactions.length === 0) {
         tbody.innerHTML = '<tr><td colspan="8" class="text-muted" style="text-align: center; padding: 40px;">No transactions found</td></tr>';
         return;
@@ -613,6 +632,70 @@ function displayTransactions(transactions) {
         `;
         
         tbody.appendChild(row);
+    });
+    
+    // Update sort indicators after displaying transactions
+    updateSortIndicators();
+}
+
+// Sort transactions
+function sortTransactions(field) {
+    // Toggle direction if clicking the same field
+    if (currentSort.field === field) {
+        currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+    } else {
+        currentSort.field = field;
+        currentSort.direction = 'asc';
+    }
+    
+    // Update sort indicators
+    updateSortIndicators();
+    
+    // Reload transactions to apply sort
+    loadTransactions();
+}
+
+// Sort transactions array
+function sortTransactionsArray(transactions, field, direction) {
+    const sorted = [...transactions].sort((a, b) => {
+        let aValue, bValue;
+        
+        if (field === 'amount') {
+            // Sort by amount (consider direction for incoming/outgoing)
+            aValue = a.amount * (a.direction === 'incoming' ? 1 : -1);
+            bValue = b.amount * (b.direction === 'incoming' ? 1 : -1);
+        } else if (field === 'date') {
+            // Sort by date
+            aValue = new Date(a.created_at).getTime();
+            bValue = new Date(b.created_at).getTime();
+        } else {
+            return 0;
+        }
+        
+        if (direction === 'asc') {
+            return aValue > bValue ? 1 : aValue < bValue ? -1 : 0;
+        } else {
+            return aValue < bValue ? 1 : aValue > bValue ? -1 : 0;
+        }
+    });
+    
+    return sorted;
+}
+
+// Update sort indicators in table headers
+function updateSortIndicators() {
+    const sortableHeaders = document.querySelectorAll('.sortable');
+    sortableHeaders.forEach(header => {
+        const indicator = header.querySelector('.sort-indicator');
+        const field = header.getAttribute('data-sort');
+        
+        if (currentSort.field === field) {
+            indicator.textContent = currentSort.direction === 'asc' ? ' ▲' : ' ▼';
+            indicator.style.opacity = '1';
+        } else {
+            indicator.textContent = '';
+            indicator.style.opacity = '0';
+        }
     });
 }
 

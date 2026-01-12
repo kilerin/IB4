@@ -32,5 +32,10 @@ instance/
 # Environment
 .env
 .env.local
+.env.server
+
+# Archives
+*.tar.gz
+*.zip
 
 

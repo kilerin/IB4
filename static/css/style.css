@@ -33,7 +33,7 @@ body {
 
 /* Sidebar */
 .sidebar {
-    width: 147px;
+    width: 177px; /* Increased by 20% from 147px */
     background-color: #ffffff;
     display: flex;
     flex-direction: column;
@@ -269,6 +269,24 @@ th {
     border-bottom: 1px solid var(--border-color);
 }
 
+th.sortable {
+    user-select: none;
+    transition: background-color 0.2s;
+}
+
+th.sortable:hover {
+    background-color: var(--bg-tertiary);
+}
+
+.sort-indicator {
+    display: inline-block;
+    margin-left: 4px;
+    opacity: 0;
+    transition: opacity 0.2s;
+    color: var(--accent-color);
+    font-size: 10px;
+}
+
 td {
     padding: 3px;
     border-bottom: none;
@@ -490,7 +508,7 @@ tbody tr:hover {
 
 .stat-card {
     background-color: var(--bg-secondary);
-    border: 1px solid var(--border-color);
+    border: none;
     border-radius: 8px;
     padding: 6px 8px;
     flex: 1;
@@ -1261,3 +1279,40 @@ tbody tr:hover {
     border: 1px solid var(--border-color);
 }
 
+
+/* Dashboard Styles */
+.dashboard-header-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 20px;
+    margin-top: 15px;
+}
+
+.dashboard-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.dashboard-stats {
+    display: flex;
+    gap: 15px;
+}
+
+.dashboard-stats .stat-card {
+    flex: 1;
+    text-align: center;
+    min-width: 100px;
+}
+
+.dashboard-stats .stat-value {
+    font-size: 14px;
+    font-weight: 600;
+    margin-top: 2px;
+}
+
+#weeklyChart {
+    max-height: 400px;
+}
