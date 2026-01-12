@@ -1805,6 +1805,7 @@ def refresh_transactions():
             continue
     
     # Update counterparty names for existing USDT transactions that don't have one yet
+    # Only update transactions that don't have counterparty_name set
     print("\n=== UPDATING EXISTING TRANSACTIONS WITH ADDRESS BOOK ===")
     updated_count = 0
     existing_usdt_txs = Transaction.query.filter_by(currency='USDT').filter(
@@ -1816,11 +1817,15 @@ def refresh_transactions():
         # For outgoing: counterparty is to_address (who received)
         counterparty_address = tx.from_address if tx.direction == 'incoming' else tx.to_address
         if counterparty_address:
+            # Normalize address for comparison
+            counterparty_address_clean = counterparty_address.strip().lower()
             counterparty_name = get_counterparty_name(counterparty_address)
             if counterparty_name:
-                tx.counterparty_name = counterparty_name
-                updated_count += 1
-                print(f"Updated transaction {tx.id}: set counterparty_name={counterparty_name} for address={counterparty_address}")
+                # Only update if counterparty_name is different (avoid duplicates)
+                if tx.counterparty_name != counterparty_name:
+                    tx.counterparty_name = counterparty_name
+                    updated_count += 1
+                    print(f"Updated transaction {tx.id}: set counterparty_name={counterparty_name} for address={counterparty_address}")
     
     # Update "Own fund transfer" status for existing transactions that don't have it yet
     print("\n=== UPDATING EXISTING TRANSACTIONS WITH OWN FUND TRANSFER STATUS ===")
@@ -1990,6 +1995,23 @@ def create_addressbook_entry():
     db.session.add(entry)
     db.session.commit()
     
+    # Update transactions for this address (only if they don't already have counterparty_name)
+    # This prevents duplicates - transactions will be updated only once
+    address_clean = address.strip().lower()
+    all_usdt_txs = Transaction.query.filter_by(currency='USDT').filter(
+        (Transaction.counterparty_name == None) | (Transaction.counterparty_name == '')
+    ).all()
+    updated_count = 0
+    for tx in all_usdt_txs:
+        counterparty_address = tx.from_address if tx.direction == 'incoming' else tx.to_address
+        if counterparty_address:
+            counterparty_address_clean = counterparty_address.strip().lower()
+            if counterparty_address_clean == address_clean:
+                tx.counterparty_name = customer
+                updated_count += 1
+    
+    db.session.commit()
+    
     return jsonify({
         'success': True,
         'address': {
@@ -2001,7 +2023,8 @@ def create_addressbook_entry():
             'date_added': entry.date_added.isoformat() if entry.date_added else None,
             'created_at': entry.created_at.isoformat(),
             'updated_at': entry.updated_at.isoformat()
-        }
+        },
+        'updated_transactions': updated_count
     })
 
 @app.route('/api/addressbook/<int:entry_id>', methods=['PUT'])
@@ -2030,12 +2053,47 @@ def update_addressbook_entry(entry_id):
                 }
             }), 400
     
+    old_address = entry.address
+    old_customer = entry.customer
+    
     entry.customer = customer
     entry.address = address
     entry.manager = manager
     entry.aml_status = aml_status
     entry.updated_at = datetime.utcnow()
     db.session.commit()
+    
+    # If customer name or address changed, update transactions
+    if old_customer != customer or old_address != address:
+        # Update transactions for the old address (if address changed)
+        if old_address != address:
+            # Clear counterparty_name for transactions with old address
+            old_address_clean = old_address.strip().lower()
+            all_usdt_txs = Transaction.query.filter_by(currency='USDT').all()
+            for tx in all_usdt_txs:
+                counterparty_address = tx.from_address if tx.direction == 'incoming' else tx.to_address
+                if counterparty_address:
+                    counterparty_address_clean = counterparty_address.strip().lower()
+                    if counterparty_address_clean == old_address_clean:
+                        tx.counterparty_name = None
+            
+            db.session.commit()
+        
+        # Update transactions for the new address (or updated customer name)
+        address_clean = address.strip().lower()
+        all_usdt_txs = Transaction.query.filter_by(currency='USDT').all()
+        updated_count = 0
+        for tx in all_usdt_txs:
+            counterparty_address = tx.from_address if tx.direction == 'incoming' else tx.to_address
+            if counterparty_address:
+                counterparty_address_clean = counterparty_address.strip().lower()
+                if counterparty_address_clean == address_clean:
+                    # Only update if the name is different (avoid duplicates)
+                    if tx.counterparty_name != customer:
+                        tx.counterparty_name = customer
+                        updated_count += 1
+        
+        db.session.commit()
     
     return jsonify({
         'success': True,
@@ -2102,8 +2160,19 @@ def update_transactions_counterparty():
     if not address:
         return jsonify({'error': 'Address is required'}), 400
     
-    # Get customer name from address book
+    # Normalize address for comparison
+    address_clean = address.strip().lower()
+    
+    # Get customer name from address book (try exact match first, then case-insensitive)
     entry = AddressBook.query.filter_by(address=address).first()
+    if not entry:
+        # Try case-insensitive match
+        all_entries = AddressBook.query.all()
+        for e in all_entries:
+            if e.address.strip().lower() == address_clean:
+                entry = e
+                break
+    
     if not entry:
         return jsonify({'error': 'Address not found in address book'}), 404
     
@@ -2112,23 +2181,22 @@ def update_transactions_counterparty():
     # Find all USDT transactions where this address is the counterparty
     # For incoming: counterparty is from_address
     # For outgoing: counterparty is to_address
-    incoming_txs = Transaction.query.filter_by(
-        currency='USDT',
-        direction='incoming',
-        from_address=address
-    ).all()
+    # Use case-insensitive comparison
+    all_usdt_txs = Transaction.query.filter_by(currency='USDT').all()
     
-    outgoing_txs = Transaction.query.filter_by(
-        currency='USDT',
-        direction='outgoing',
-        to_address=address
-    ).all()
-    
-    all_txs = incoming_txs + outgoing_txs
+    matching_txs = []
+    for tx in all_usdt_txs:
+        # Check if this transaction involves the address
+        counterparty_address = tx.from_address if tx.direction == 'incoming' else tx.to_address
+        if counterparty_address:
+            counterparty_address_clean = counterparty_address.strip().lower()
+            if counterparty_address_clean == address_clean:
+                matching_txs.append(tx)
     
     # Update counterparty_name for all matching transactions
+    # Only update if the name is different (avoid duplicates)
     updated_count = 0
-    for tx in all_txs:
+    for tx in matching_txs:
         if tx.counterparty_name != customer_name:
             tx.counterparty_name = customer_name
             updated_count += 1
