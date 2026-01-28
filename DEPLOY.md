@@ -55,6 +55,16 @@ nano .env
 **Важно:** Измените пароли в `.env` файле:
 - `POSTGRES_PASSWORD` - надежный пароль для PostgreSQL
 - `SECRET_KEY` - случайная строка для Flask (можно сгенерировать: `python -c "import secrets; print(secrets.token_hex(32))"`)
+- `APP_PASSWORD` - пароль для входа в приложение (по умолчанию: `admin123`)
+
+Пример `.env` файла:
+```env
+POSTGRES_DB=crypto_deck
+POSTGRES_USER=crypto_user
+POSTGRES_PASSWORD=your_secure_db_password
+SECRET_KEY=your_secret_key_here
+APP_PASSWORD=your_app_password_here
+```
 
 ### 4. Запуск приложения
 

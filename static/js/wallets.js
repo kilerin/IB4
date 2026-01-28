@@ -1195,26 +1195,13 @@ async function saveAddressFromTransaction(event) {
         
         if (response.ok) {
             const data = await response.json();
-            showNotification('Address added to address book');
-            
-            // Update all transactions with this address
-            const updateResponse = await fetch('/api/transactions/update-counterparty', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    address: address
-                })
-            });
-            
-            if (updateResponse.ok) {
-                const updateData = await updateResponse.json();
-                showNotification(`Updated ${updateData.updated_count} transactions`);
+            // Transactions are automatically updated on the backend
+            if (data.updated_transactions && data.updated_transactions > 0) {
+                showNotification(`Address added. Updated ${data.updated_transactions} transactions`);
                 // Reload transactions to show updated names
                 loadTransactions();
             } else {
-                console.error('Error updating transactions');
+                showNotification('Address added to address book');
             }
             
             closeAddAddressModal();
@@ -1557,4 +1544,3 @@ function exportToExcel() {
     
     showNotification('Transactions exported to Excel');
 }
-

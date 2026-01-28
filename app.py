@@ -1,4 +1,5 @@
-from flask import Flask, render_template, jsonify, request, send_file
+from flask import Flask, render_template, jsonify, request, send_file, session, redirect, url_for
+from functools import wraps
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import func
 from datetime import datetime, timedelta
@@ -31,7 +32,34 @@ else:
     app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///crypto_deck.db'
 
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+# Secret key для сессий (используется для шифрования cookie)
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key-change-in-production')
+# Пароль для входа (из переменной окружения)
+APP_PASSWORD = os.getenv('APP_PASSWORD', 'admin123')
+
 db = SQLAlchemy(app)
+
+# Декоратор для защиты маршрутов
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'logged_in' not in session:
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+# Проверка аутентификации перед каждым запросом
+@app.before_request
+def require_login():
+    # Разрешаем доступ к странице входа и статическим файлам без аутентификации
+    if request.endpoint == 'login' or request.path.startswith('/static/'):
+        return
+    if request.path.startswith('/api/'):
+        # Для API также требуется аутентификация
+        if 'logged_in' not in session:
+            return jsonify({'error': 'Unauthorized'}), 401
+    elif 'logged_in' not in session:
+        return redirect(url_for('login'))
 
 # Models
 class Wallet(db.Model):
@@ -99,19 +127,39 @@ class AmlCheck(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 # Routes
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        password = request.form.get('password')
+        if password == APP_PASSWORD:
+            session['logged_in'] = True
+            return redirect(url_for('dashboard'))
+        else:
+            return render_template('login.html', error='Неверный пароль')
+    return render_template('login.html')
+
+@app.route('/logout')
+def logout():
+    session.pop('logged_in', None)
+    return redirect(url_for('login'))
+
 @app.route('/')
+@login_required
 def dashboard():
     return render_template('dashboard.html')
 
 @app.route('/wallets')
+@login_required
 def wallets():
     return render_template('wallets.html')
 
 @app.route('/address-book')
+@login_required
 def address_book():
     return render_template('address_book.html')
 
 @app.route('/aml-check')
+@login_required
 def aml_check():
     return render_template('aml_check.html')
 

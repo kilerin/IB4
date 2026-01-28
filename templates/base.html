@@ -19,6 +19,9 @@
                 <li><a href="{{ url_for('address_book') }}" class="{% if request.endpoint == 'address_book' %}active{% endif %}">Address Book</a></li>
                 <li><a href="{{ url_for('aml_check') }}" class="{% if request.endpoint == 'aml_check' %}active{% endif %}">AML Check</a></li>
             </ul>
+            <div style="margin-top: auto; padding: 20px;">
+                <a href="{{ url_for('logout') }}" class="btn btn-secondary" style="width: 100%; text-align: center; display: block;">Выйти</a>
+            </div>
         </nav>
         <main class="main-content">
             {% block content %}{% endblock %}
