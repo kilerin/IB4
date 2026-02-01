@@ -1,6 +1,23 @@
 let sortableInstance = null;
 let currentSort = { field: null, direction: 'asc' }; // 'asc' or 'desc'
 
+// Make sortTransactions available globally
+window.sortTransactions = function(field) {
+    // Toggle direction if clicking the same field
+    if (currentSort.field === field) {
+        currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+    } else {
+        currentSort.field = field;
+        currentSort.direction = 'asc';
+    }
+    
+    // Update sort indicators
+    updateSortIndicators();
+    
+    // Reload transactions to apply sort
+    loadTransactions();
+};
+
 // Load wallets on page load
 document.addEventListener('DOMContentLoaded', function() {
     // Restore toggle states from localStorage
@@ -637,7 +654,7 @@ function displayTransactions(transactions) {
     updateSortIndicators();
 }
 
-// Sort transactions
+// Sort transactions (also available as window.sortTransactions)
 function sortTransactions(field) {
     // Toggle direction if clicking the same field
     if (currentSort.field === field) {
@@ -652,6 +669,11 @@ function sortTransactions(field) {
     
     // Reload transactions to apply sort
     loadTransactions();
+}
+
+// Ensure function is available globally
+if (typeof window !== 'undefined') {
+    window.sortTransactions = sortTransactions;
 }
 
 // Sort transactions array
