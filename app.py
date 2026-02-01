@@ -126,6 +126,25 @@ class AmlCheck(db.Model):
     checked_at = db.Column(db.DateTime, default=datetime.utcnow)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+class Channel(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(200), nullable=False)
+    transaction_type = db.Column(db.String(50), nullable=False)  # Sell usdt, Buy usdt, Alex, Agent, Loan, Expence, Other, Transit
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class IncomingPayment(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    channel_id = db.Column(db.Integer, db.ForeignKey('channel.id', ondelete='CASCADE'), nullable=False)
+    sum_amount = db.Column(db.Float, nullable=False)  # SUM $
+    agent = db.Column(db.String(200), nullable=False, default='')
+    from_address = db.Column(db.String(200), nullable=False, default='')
+    date = db.Column(db.Date, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    channel = db.relationship('Channel', backref=db.backref('incoming_payments', lazy=True, cascade='all, delete-orphan'))
+
 # Routes
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -162,6 +181,11 @@ def address_book():
 @login_required
 def aml_check():
     return render_template('aml_check.html')
+
+@app.route('/transit-payments')
+@login_required
+def transit_payments():
+    return render_template('transit_payments.html')
 
 # API Routes
 @app.route('/api/wallets', methods=['GET'])
@@ -2272,6 +2296,278 @@ def update_transactions_counterparty():
         'updated_count': updated_count,
         'customer_name': customer_name
     })
+
+# Transit Payments API Routes
+@app.route('/api/channels', methods=['GET'])
+def get_channels():
+    """Get all channels"""
+    channels = Channel.query.order_by(Channel.created_at).all()
+    return jsonify({
+        'channels': [{
+            'id': ch.id,
+            'name': ch.name,
+            'transaction_type': ch.transaction_type,
+            'created_at': ch.created_at.isoformat() if ch.created_at else None,
+            'updated_at': ch.updated_at.isoformat() if ch.updated_at else None
+        } for ch in channels]
+    })
+
+@app.route('/api/channels', methods=['POST'])
+def create_channel():
+    """Create a new channel"""
+    data = request.json
+    name = data.get('name', '').strip()
+    transaction_type = data.get('transaction_type', '').strip()
+    
+    if not name:
+        return jsonify({'error': 'Channel name is required'}), 400
+    
+    if not transaction_type:
+        return jsonify({'error': 'Transaction type is required'}), 400
+    
+    # Validate transaction type
+    valid_types = ['Sell usdt', 'Buy usdt', 'Alex', 'Agent', 'Loan', 'Expence', 'Other', 'Transit']
+    if transaction_type not in valid_types:
+        return jsonify({'error': 'Invalid transaction type'}), 400
+    
+    channel = Channel(name=name, transaction_type=transaction_type)
+    db.session.add(channel)
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'channel': {
+            'id': channel.id,
+            'name': channel.name,
+            'transaction_type': channel.transaction_type,
+            'created_at': channel.created_at.isoformat() if channel.created_at else None,
+            'updated_at': channel.updated_at.isoformat() if channel.updated_at else None
+        }
+    }), 201
+
+@app.route('/api/channels/<int:channel_id>', methods=['PUT'])
+def update_channel(channel_id):
+    """Update a channel"""
+    channel = Channel.query.get_or_404(channel_id)
+    data = request.json
+    name = data.get('name', '').strip()
+    transaction_type = data.get('transaction_type', '').strip()
+    
+    if not name:
+        return jsonify({'error': 'Channel name is required'}), 400
+    
+    if not transaction_type:
+        return jsonify({'error': 'Transaction type is required'}), 400
+    
+    # Validate transaction type
+    valid_types = ['Sell usdt', 'Buy usdt', 'Alex', 'Agent', 'Loan', 'Expence', 'Other', 'Transit']
+    if transaction_type not in valid_types:
+        return jsonify({'error': 'Invalid transaction type'}), 400
+    
+    channel.name = name
+    channel.transaction_type = transaction_type
+    channel.updated_at = datetime.utcnow()
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'channel': {
+            'id': channel.id,
+            'name': channel.name,
+            'transaction_type': channel.transaction_type,
+            'created_at': channel.created_at.isoformat() if channel.created_at else None,
+            'updated_at': channel.updated_at.isoformat() if channel.updated_at else None
+        }
+    })
+
+@app.route('/api/channels/<int:channel_id>', methods=['DELETE'])
+def delete_channel(channel_id):
+    """Delete a channel"""
+    channel = Channel.query.get_or_404(channel_id)
+    db.session.delete(channel)
+    db.session.commit()
+    
+    return jsonify({'success': True})
+
+@app.route('/api/channels/<int:channel_id>/payments', methods=['GET'])
+def get_channel_payments(channel_id):
+    """Get payment statistics for a channel"""
+    channel = Channel.query.get_or_404(channel_id)
+    
+    # Get all transactions with matching transaction_type
+    transactions = Transaction.query.filter_by(
+        transaction_type=channel.transaction_type,
+        currency='USDT'
+    ).all()
+    
+    # Calculate statistics
+    total_in = sum(tx.amount for tx in transactions if tx.direction == 'incoming')
+    total_out = sum(tx.amount for tx in transactions if tx.direction == 'outgoing')
+    
+    # Calculate incoming payments count from transactions
+    inc_pmts_count = len([tx for tx in transactions if tx.direction == 'incoming'])
+    
+    # Calculate sum of all Incoming Payments from IncomingPayment table
+    incoming_payments = IncomingPayment.query.filter_by(channel_id=channel_id).all()
+    inc_pmts_sum = sum(payment.sum_amount for payment in incoming_payments if payment.sum_amount)
+    
+    agent_balance = 0.0  # Placeholder - needs business logic
+    orders = len(transactions)  # Total number of transactions
+    
+    return jsonify({
+        'channel_id': channel.id,
+        'channel_name': channel.name,
+        'in': round(total_in, 2),
+        'out': round(total_out, 2),
+        'inc_pmts': round(inc_pmts_sum, 2),  # Sum of all Incoming Payments
+        'agent_balance': agent_balance,
+        'orders': orders
+    })
+
+@app.route('/api/channels/<int:channel_id>/incoming-payments', methods=['GET'])
+def get_channel_incoming_payments(channel_id):
+    """Get incoming payments list for a channel"""
+    channel = Channel.query.get_or_404(channel_id)
+    
+    # Sort by date ascending (oldest first), then by created_at ascending
+    # For SQLite compatibility, use case when date is null
+    from sqlalchemy import case
+    payments = IncomingPayment.query.filter_by(channel_id=channel_id).order_by(
+        case((IncomingPayment.date.is_(None), 1), else_=0),
+        IncomingPayment.date.asc(),
+        IncomingPayment.created_at.asc()
+    ).all()
+    
+    incoming_payments = []
+    for payment in payments:
+        payment_data = {
+            'id': payment.id,
+            'sum_amount': float(payment.sum_amount) if payment.sum_amount is not None else 0.0,
+            'agent': str(payment.agent) if payment.agent is not None else '',
+            'from_address': str(payment.from_address) if payment.from_address is not None else '',
+            'date': payment.date.strftime('%Y-%m-%d') if payment.date else ''
+        }
+        print(f"Payment {payment.id}: {payment_data}")  # Debug
+        incoming_payments.append(payment_data)
+    
+    return jsonify({
+        'channel_id': channel.id,
+        'incoming_payments': incoming_payments
+    })
+
+@app.route('/api/channels/<int:channel_id>/incoming-payments', methods=['POST'])
+def create_incoming_payment(channel_id):
+    """Create a new incoming payment"""
+    channel = Channel.query.get_or_404(channel_id)
+    data = request.json
+    
+    print(f"Received data: {data}")  # Debug
+    
+    sum_amount = data.get('sum_amount', 0)
+    agent = data.get('agent', '')
+    from_address = data.get('from_address', '')
+    date_str = data.get('date', '')
+    
+    # Strip strings if they are strings
+    if isinstance(agent, str):
+        agent = agent.strip()
+    if isinstance(from_address, str):
+        from_address = from_address.strip()
+    if isinstance(date_str, str):
+        date_str = date_str.strip()
+    
+    # Allow sum_amount to be 0 or empty for new rows
+    if sum_amount is None:
+        sum_amount = 0
+    
+    try:
+        sum_amount = float(sum_amount)
+    except (ValueError, TypeError):
+        sum_amount = 0
+    
+    date = None
+    if date_str:
+        try:
+            date = datetime.strptime(date_str, '%Y-%m-%d').date()
+        except ValueError:
+            return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD'}), 400
+    
+    payment = IncomingPayment(
+        channel_id=channel_id,
+        sum_amount=sum_amount,
+        agent=agent if agent else '',
+        from_address=from_address if from_address else '',
+        date=date
+    )
+    db.session.add(payment)
+    db.session.commit()
+    
+    # Refresh to get the saved payment
+    db.session.refresh(payment)
+    
+    print(f"Saved payment: id={payment.id}, sum_amount={payment.sum_amount}, agent={payment.agent}, from_address={payment.from_address}, date={payment.date}")  # Debug
+    
+    return jsonify({
+        'success': True,
+        'payment': {
+            'id': payment.id,
+            'sum_amount': float(payment.sum_amount) if payment.sum_amount is not None else 0.0,
+            'agent': payment.agent if payment.agent else '',
+            'from_address': payment.from_address if payment.from_address else '',
+            'date': payment.date.strftime('%Y-%m-%d') if payment.date else ''
+        }
+    }), 201
+
+@app.route('/api/incoming-payments/<int:payment_id>', methods=['PUT'])
+def update_incoming_payment(payment_id):
+    """Update an incoming payment"""
+    payment = IncomingPayment.query.get_or_404(payment_id)
+    data = request.json
+    
+    sum_amount = data.get('sum_amount')
+    agent = data.get('agent', '').strip()
+    from_address = data.get('from_address', '').strip()
+    date_str = data.get('date', '').strip()
+    
+    if sum_amount is not None:
+        try:
+            payment.sum_amount = float(sum_amount)
+        except (ValueError, TypeError):
+            return jsonify({'error': 'Invalid SUM amount'}), 400
+    
+    payment.agent = agent if agent else None
+    payment.from_address = from_address if from_address else None
+    
+    if date_str:
+        try:
+            payment.date = datetime.strptime(date_str, '%Y-%m-%d').date()
+        except ValueError:
+            return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD'}), 400
+    else:
+        payment.date = None
+    
+    payment.updated_at = datetime.utcnow()
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'payment': {
+            'id': payment.id,
+            'sum_amount': payment.sum_amount,
+            'agent': payment.agent or '',
+            'from_address': payment.from_address or '',
+            'date': payment.date.strftime('%Y-%m-%d') if payment.date else ''
+        }
+    })
+
+@app.route('/api/incoming-payments/<int:payment_id>', methods=['DELETE'])
+def delete_incoming_payment(payment_id):
+    """Delete an incoming payment"""
+    payment = IncomingPayment.query.get_or_404(payment_id)
+    db.session.delete(payment)
+    db.session.commit()
+    
+    return jsonify({'success': True})
 
 if __name__ == '__main__':
     with app.app_context():

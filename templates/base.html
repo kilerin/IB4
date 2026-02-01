@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}IB4 CRYPTO DECK{% endblock %}</title>
+    <title>{% block title %}IB4 CD{% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     {% block extra_head %}{% endblock %}
 </head>
@@ -11,17 +11,42 @@
     <div class="app-container">
         <nav class="sidebar">
             <div class="logo">
-                <h1>IB4 CRYPTO DECK</h1>
+                <h1>IB4 CD</h1>
             </div>
             <ul class="nav-menu">
-                <li><a href="{{ url_for('dashboard') }}" class="{% if request.endpoint == 'dashboard' %}active{% endif %}">Dashboard</a></li>
-                <li><a href="{{ url_for('wallets') }}" class="{% if request.endpoint == 'wallets' %}active{% endif %}">Wallets</a></li>
-                <li><a href="{{ url_for('address_book') }}" class="{% if request.endpoint == 'address_book' %}active{% endif %}">Address Book</a></li>
-                <li><a href="{{ url_for('aml_check') }}" class="{% if request.endpoint == 'aml_check' %}active{% endif %}">AML Check</a></li>
+                <li>
+                    <a href="{{ url_for('dashboard') }}" class="nav-icon {% if request.endpoint == 'dashboard' %}active{% endif %}" title="Dashboard">
+                        <img src="/static/ico/presentation.svg" alt="Dashboard">
+                    </a>
+                </li>
+                <li>
+                    <a href="{{ url_for('wallets') }}" class="nav-icon {% if request.endpoint == 'wallets' %}active{% endif %}" title="Wallets">
+                        <img src="/static/ico/wallet-money.svg" alt="Wallets">
+                    </a>
+                </li>
+                <li>
+                    <a href="{{ url_for('address_book') }}" class="nav-icon {% if request.endpoint == 'address_book' %}active{% endif %}" title="Address Book">
+                        <img src="/static/ico/vote.svg" alt="Address Book">
+                    </a>
+                </li>
+                <li>
+                    <a href="{{ url_for('aml_check') }}" class="nav-icon {% if request.endpoint == 'aml_check' %}active{% endif %}" title="AML Check">
+                        <img src="/static/ico/shield-up.svg" alt="AML Check">
+                    </a>
+                </li>
+                <li>
+                    <a href="{{ url_for('transit_payments') }}" class="nav-icon {% if request.endpoint == 'transit_payments' %}active{% endif %}" title="Transit Payments">
+                        <img src="/static/ico/round-sort.svg" alt="Transit Payments">
+                    </a>
+                </li>
             </ul>
-            <div style="margin-top: auto; padding: 20px;">
-                <a href="{{ url_for('logout') }}" class="btn btn-secondary" style="width: 100%; text-align: center; display: block;">Выйти</a>
-            </div>
+            <ul class="nav-menu" style="margin-top: auto;">
+                <li>
+                    <a href="{{ url_for('logout') }}" class="nav-icon" title="Выйти">
+                        <img src="/static/ico/withdraw.svg" alt="Выйти">
+                    </a>
+                </li>
+            </ul>
         </nav>
         <main class="main-content">
             {% block content %}{% endblock %}

@@ -33,7 +33,7 @@ body {
 
 /* Sidebar */
 .sidebar {
-    width: 177px; /* Increased by 20% from 147px */
+    width: 70px; /* Reduced for icon-only menu */
     background-color: #ffffff;
     display: flex;
     flex-direction: column;
@@ -41,13 +41,14 @@ body {
 }
 
 .logo {
-    padding: 0 20px 30px;
+    padding: 0 10px 30px;
     margin-bottom: 20px;
     background-color: #ffffff;
+    text-align: center;
 }
 
 .logo h1 {
-    font-size: 18px;
+    font-size: 14px;
     font-weight: 600;
     color: var(--text-primary);
     letter-spacing: 0.5px;
@@ -64,12 +65,34 @@ body {
 
 .nav-menu a {
     display: block;
-    padding: 12px 20px;
+    padding: 12px;
     color: var(--text-secondary);
     text-decoration: none;
     border-radius: 4px;
     transition: all 0.2s;
     font-size: 14px;
+    text-align: center;
+    position: relative;
+}
+
+.nav-menu a.nav-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 12px;
+}
+
+.nav-menu a.nav-icon img {
+    width: 24px;
+    height: 24px;
+    display: block;
+    opacity: 0.7;
+    transition: opacity 0.2s;
+}
+
+.nav-menu a.nav-icon:hover img,
+.nav-menu a.nav-icon.active img {
+    opacity: 1;
 }
 
 .nav-menu a:hover {
@@ -80,6 +103,48 @@ body {
 .nav-menu a.active {
     background-color: var(--bg-tertiary);
     color: var(--accent-color);
+}
+
+/* Tooltip для навигации */
+.nav-menu a.nav-icon[title]:hover::after {
+    content: attr(title);
+    position: absolute;
+    left: 100%;
+    margin-left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    padding: 6px 10px;
+    background-color: var(--text-primary);
+    color: white;
+    font-size: 12px;
+    white-space: nowrap;
+    border-radius: 4px;
+    z-index: 1000;
+    pointer-events: none;
+    opacity: 0;
+    animation: tooltipFadeIn 0.2s forwards;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+@keyframes tooltipFadeIn {
+    to {
+        opacity: 1;
+    }
+}
+
+.nav-menu a.nav-icon[title]:hover::before {
+    content: '';
+    position: absolute;
+    left: 100%;
+    margin-left: 5px;
+    top: 50%;
+    transform: translateY(-50%);
+    border: 5px solid transparent;
+    border-right-color: var(--text-primary);
+    z-index: 1001;
+    pointer-events: none;
+    opacity: 0;
+    animation: tooltipFadeIn 0.2s forwards;
 }
 
 /* Main Content */
@@ -395,6 +460,40 @@ tbody tr:hover {
     opacity: 0.7;
     margin-left: 4px;
     font-weight: 400;
+    position: relative;
+    display: inline-block;
+    transition: opacity 0.2s;
+}
+
+.wallet-item:hover .wallet-address-suffix {
+    color: transparent;
+}
+
+.wallet-action-icons {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    background-color: var(--bg-tertiary);
+    padding: 2px 4px;
+    border-radius: 4px;
+    opacity: 0;
+    transition: opacity 0.2s;
+    z-index: 10;
+    pointer-events: none;
+}
+
+.wallet-item:hover .wallet-action-icons {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.wallet-action-icons img,
+.wallet-action-icons button {
+    pointer-events: auto;
 }
 
 .wallet-copy-icon {
@@ -731,6 +830,39 @@ tbody tr:hover {
 .transactions-panel {
     flex: 1;
     min-width: 0;
+    margin-bottom: 0;
+    border: none !important;
+}
+
+/* Transit Payments Layout - Three Columns */
+.transit-payments-layout {
+    display: flex;
+    flex-direction: row;
+    gap: 20px;
+    align-items: flex-start;
+}
+
+.transit-channels-panel {
+    flex: 0 0 170px;
+    width: 170px;
+    min-width: 170px;
+    max-width: 170px;
+    margin-bottom: 0;
+    border: none !important;
+}
+
+.transit-payments-panel {
+    flex: 1;
+    min-width: 0;
+    margin-bottom: 0;
+    border: none !important;
+}
+
+.transit-incoming-panel {
+    flex: 0 0 400px;
+    width: 400px;
+    min-width: 400px;
+    max-width: 400px;
     margin-bottom: 0;
     border: none !important;
 }
@@ -1324,4 +1456,53 @@ tbody tr:hover {
 
 #weeklyChart {
     max-height: 400px;
+}
+
+/* Incoming Payments Table Inputs */
+.transit-incoming-panel #incomingPaymentsTable input[type="number"],
+.transit-incoming-panel #incomingPaymentsTable input[type="text"],
+.transit-incoming-panel #incomingPaymentsTable input[type="date"] {
+    border: none;
+    background-color: transparent;
+    padding: 4px 6px;
+    font-size: 12px;
+    width: 100%;
+    box-sizing: border-box;
+    appearance: none;
+    -moz-appearance: textfield;
+}
+
+.transit-incoming-panel #incomingPaymentsTable input[type="number"]::-webkit-outer-spin-button,
+.transit-incoming-panel #incomingPaymentsTable input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.transit-incoming-panel #incomingPaymentsTable input[type="number"]:focus,
+.transit-incoming-panel #incomingPaymentsTable input[type="text"]:focus,
+.transit-incoming-panel #incomingPaymentsTable input[type="date"]:focus {
+    outline: none;
+    background-color: var(--bg-secondary);
+    border-radius: 2px;
+}
+
+.transit-incoming-panel #incomingPaymentsTable input[type="date"]::-webkit-calendar-picker-indicator {
+    opacity: 0;
+    cursor: pointer;
+    width: 100%;
+    height: 100%;
+    position: absolute;
+}
+
+.transit-incoming-panel #incomingPaymentsTable td {
+    padding: 4px;
+    position: relative;
+}
+
+/* Make SUM $ column 1.5x wider */
+.transit-incoming-panel table thead th:first-child,
+.transit-incoming-panel table tbody td:first-child {
+    width: 80px;
+    min-width: 80px;
+    max-width: 80px;
 }

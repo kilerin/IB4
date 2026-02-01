@@ -120,10 +120,6 @@ function displayWallets(wallets) {
         walletItem.className = `wallet-item wallet-color-${color} ${wallet.is_hidden ? 'hidden' : ''}`;
         walletItem.dataset.walletId = wallet.id;
         
-        const amlDate = wallet.aml_checked_at 
-            ? new Date(wallet.aml_checked_at).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })
-            : 'Never';
-        
         const usdtAmount = Math.floor(wallet.balance_usdt).toLocaleString('ru-RU');
         const trxAmount = Math.floor(wallet.balance_trx).toLocaleString('ru-RU');
         
@@ -131,12 +127,19 @@ function displayWallets(wallets) {
             <div class="wallet-content">
                 <div class="wallet-row">
                     <div class="wallet-left">
-                        <button class="wallet-icon-btn" onclick="toggleWalletVisibility(${wallet.id}, ${!wallet.is_hidden})" title="${wallet.is_hidden ? 'Show' : 'Hide'}">
-                            <img src="/static/ico/eye.svg" class="wallet-icon" alt="Hide">
-                        </button>
                         <span class="wallet-name clickable" onclick="openWalletDetails(${wallet.id})" title="Click to view details">${escapeHtml(wallet.name)}</span>
-                        <span class="wallet-address-suffix">...${escapeHtml(wallet.address.slice(-6))}</span>
-                        <img src="/static/ico/copy.svg" class="wallet-copy-icon" onclick="event.stopPropagation(); copyToClipboard('${escapeHtml(wallet.address)}'); showNotification('Address copied')" title="Copy address" alt="Copy">
+                        <span class="wallet-address-suffix">
+                            ...${escapeHtml(wallet.address.slice(-6))}
+                            <div class="wallet-action-icons">
+                                <img src="/static/ico/copy.svg" class="wallet-copy-icon" onclick="event.stopPropagation(); copyToClipboard('${escapeHtml(wallet.address)}'); showNotification('Address copied')" title="Copy address" alt="Copy">
+                                <button class="wallet-icon-btn" onclick="toggleWalletVisibility(${wallet.id}, ${!wallet.is_hidden})" title="${wallet.is_hidden ? 'Show' : 'Hide'}">
+                                    <img src="/static/ico/eye.svg" class="wallet-icon" alt="Hide">
+                                </button>
+                                <button class="wallet-icon-btn" onclick="openAmlConfirmModal(${wallet.id || 'null'})" title="Check AML" data-wallet-id="${wallet.id || ''}">
+                                    <img src="/static/ico/shield-check.svg" class="wallet-icon" alt="AML">
+                                </button>
+                            </div>
+                        </span>
                     </div>
                     <div class="wallet-right">
                         <span class="wallet-balance-usdt">${usdtAmount}</span>
@@ -145,9 +148,6 @@ function displayWallets(wallets) {
                 </div>
                 <div class="wallet-row">
                     <div class="wallet-left">
-                        <button class="wallet-icon-btn" onclick="openAmlConfirmModal(${wallet.id || 'null'})" title="Check AML" data-wallet-id="${wallet.id || ''}">
-                            <img src="/static/ico/shield-check.svg" class="wallet-icon" alt="AML">
-                        </button>
                         ${wallet.aml_checking ? `
                             <div class="aml-progress-container">
                                 <div class="aml-progress-bar">
@@ -164,7 +164,6 @@ function displayWallets(wallets) {
                                     <span class="wallet-aml-status">${wallet.aml_status || 'Pending'}</span>
                                 `}
                             `}
-                            <span class="wallet-aml-date text-muted">${amlDate}</span>
                         `}
                     </div>
                     <div class="wallet-right">
@@ -474,7 +473,7 @@ async function addWallet(event) {
     
     const name = document.getElementById('walletName').value;
     const address = document.getElementById('walletAddress').value.trim();
-    const color = document.querySelector('input[name="walletColor"]:checked')?.value || 'gray';
+    const color = 'gray'; // Все кошельки одинакового цвета
     
     // Basic validation
     if (!address.startsWith('T') || address.length !== 34) {
@@ -827,23 +826,7 @@ async function openWalletDetails(walletId) {
         document.getElementById('walletDetailsName').value = wallet.name;
         document.getElementById('walletDetailsAddress').textContent = wallet.address;
         
-        // Set color
-        const color = wallet.color || 'gray';
-        // Map color names to capitalized form for ID matching
-        const colorMap = {
-            'red': 'Red',
-            'blue': 'Blue',
-            'purple': 'Purple',
-            'gray': 'Gray',
-            'green': 'Green',
-            'orange': 'Orange',
-            'yellow': 'Yellow'
-        };
-        const colorCapitalized = colorMap[color] || 'Gray';
-        const colorRadio = document.getElementById(`detailsColor${colorCapitalized}`);
-        if (colorRadio) {
-            colorRadio.checked = true;
-        }
+        // Цвет больше не используется - все кошельки одинакового цвета
         
         // Load wallet transactions
         await loadWalletTransactions(walletId);
@@ -917,7 +900,7 @@ async function saveWalletChanges() {
     if (!currentWalletId) return;
     
     const newName = document.getElementById('walletDetailsName').value.trim();
-    const color = document.querySelector('input[name="walletDetailsColor"]:checked')?.value || 'gray';
+    const color = 'gray'; // Все кошельки одинакового цвета
     
     if (!newName) {
         alert('Wallet name cannot be empty');
