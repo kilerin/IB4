@@ -322,9 +322,11 @@ function displayIncomingPayments(payments) {
                 <input type="text" class="form-input incoming-payment-sum" 
                        value="${sumAmountFormatted}" 
                        data-original-value="${sumAmount || ''}"
+                       data-payment-id="${payment.id}"
                        placeholder="0"
-                       onfocus="if (this.value === '') { this.value = ''; } else { this.value = this.dataset.originalValue || ''; }"
-                       onblur="formatSumInput(this); updateIncomingPayment(${payment.id}, 'sum_amount', parseSumValue(this.value))" 
+                       onfocus="handleSumInputFocus(this)"
+                       onblur="handleSumInputBlur(this)"
+                       oninput="handleSumInputChange(this)"
                        style="width: 100%; padding: 4px; font-size: 12px; text-align: right;">
             </td>
             <td>
@@ -388,22 +390,44 @@ async function addIncomingPaymentRow() {
     }
 }
 
-// Update incoming payment
-async function updateIncomingPayment(paymentId, field, value) {
+// Update single field of incoming payment (used for sum_amount field)
+async function updateIncomingPaymentField(paymentId, field, value) {
     try {
         const paymentRow = document.querySelector(`tr[data-payment-id="${paymentId}"]`);
-        const inputs = paymentRow.querySelectorAll('input');
+        if (!paymentRow) {
+            console.error('Payment row not found for ID:', paymentId);
+            return;
+        }
         
-        // Parse sum value to remove spaces
-        const sumValue = inputs[0].classList.contains('incoming-payment-sum') 
-            ? parseSumValue(inputs[0].value) 
-            : inputs[0].value;
+        const inputs = paymentRow.querySelectorAll('input');
+        if (!inputs || inputs.length < 4) {
+            console.error('Inputs not found in payment row');
+            return;
+        }
+        
+        // Get current values from inputs
+        const sumInput = inputs[0];
+        let sumValue = value;
+        if (field === 'sum_amount') {
+            // Use the provided value
+            sumValue = value;
+        } else if (sumInput.classList.contains('incoming-payment-sum')) {
+            // Use original value if available, otherwise parse current value
+            sumValue = sumInput.dataset.originalValue || parseSumValue(sumInput.value) || 0;
+        } else {
+            sumValue = sumInput.value || 0;
+        }
+        
+        // Convert sum to number if it's a string number
+        if (sumValue && typeof sumValue === 'string' && !isNaN(parseFloat(sumValue))) {
+            sumValue = parseFloat(sumValue);
+        }
         
         const data = {
-            sum_amount: sumValue,
-            agent: inputs[1].value,
-            from_address: inputs[2].value,
-            date: inputs[3].value
+            sum_amount: (field === 'sum_amount' ? value : (parseFloat(sumValue) || 0)),
+            agent: inputs[1].value || '',
+            from_address: inputs[2].value || '',
+            date: inputs[3].value || ''
         };
         
         const response = await fetch(`/api/incoming-payments/${paymentId}`, {
@@ -414,8 +438,11 @@ async function updateIncomingPayment(paymentId, field, value) {
         
         if (!response.ok) {
             const error = await response.json();
-            alert(error.error || 'Failed to update payment');
-            await loadIncomingPayments(selectedChannelId); // Reload to restore correct values
+            console.error('Update error:', error);
+            // Reload to restore correct values
+            if (selectedChannelId) {
+                await loadIncomingPayments(selectedChannelId);
+            }
         } else {
             // Reload payments statistics to update "Incoming payments" column
             if (selectedChannelId) {
@@ -424,9 +451,16 @@ async function updateIncomingPayment(paymentId, field, value) {
         }
     } catch (error) {
         console.error('Error updating payment:', error);
-        alert('Error updating payment');
-        await loadIncomingPayments(selectedChannelId); // Reload to restore correct values
+        // Reload on error
+        if (selectedChannelId) {
+            await loadIncomingPayments(selectedChannelId);
+        }
     }
+}
+
+// Update incoming payment (used for other fields like agent, from_address, date)
+async function updateIncomingPayment(paymentId, field, value) {
+    await updateIncomingPaymentField(paymentId, field, value);
 }
 
 // Delete incoming payment
@@ -531,28 +565,64 @@ function formatNumberWithSpaces(value) {
     return decimalPart ? `${formattedInteger}.${decimalPart}` : formattedInteger;
 }
 
-// Parse sum value (remove spaces)
+// Parse sum value (remove spaces and convert to number)
 function parseSumValue(value) {
-    if (!value) return '';
-    return value.toString().replace(/\s/g, '').replace(',', '.');
+    if (!value || value === '') return '';
+    const cleaned = value.toString().replace(/\s/g, '').replace(',', '.');
+    const num = parseFloat(cleaned);
+    return isNaN(num) ? '' : num.toString();
 }
 
-// Format sum input on blur
-function formatSumInput(input) {
-    const value = parseSumValue(input.value);
-    if (value && value !== '0') {
-        const num = parseFloat(value);
-        if (!isNaN(num) && num !== 0) {
-            input.value = formatNumberWithSpaces(num);
-            input.dataset.originalValue = num.toString();
-        } else {
-            input.value = '';
-            input.dataset.originalValue = '';
-        }
-    } else {
+// Handle sum input focus - show raw value for editing
+function handleSumInputFocus(input) {
+    const rawValue = input.dataset.originalValue || '';
+    if (rawValue) {
+        input.value = rawValue;
+    } else if (input.value) {
+        // If no original value, parse current formatted value
+        const parsed = parseSumValue(input.value);
+        input.value = parsed || '';
+        input.dataset.originalValue = parsed || '';
+    }
+}
+
+// Handle sum input change - allow typing without validation
+function handleSumInputChange(input) {
+    // Just allow typing, don't validate or format during input
+    // Store the current raw value
+    const currentValue = input.value.replace(/\s/g, '').replace(',', '.');
+    input.dataset.originalValue = currentValue;
+}
+
+// Handle sum input blur - format and save
+function handleSumInputBlur(input) {
+    const paymentId = input.dataset.paymentId;
+    if (!paymentId) return;
+    
+    const rawValue = input.value.replace(/\s/g, '').replace(',', '.');
+    
+    // Parse the value
+    const num = rawValue ? parseFloat(rawValue) : 0;
+    
+    if (isNaN(num) || num === 0) {
+        // If invalid or zero, clear the field
         input.value = '';
         input.dataset.originalValue = '';
+        // Update with zero value (not empty, as backend expects number)
+        updateIncomingPaymentField(parseInt(paymentId), 'sum_amount', 0);
+    } else {
+        // Format and save
+        const formatted = formatNumberWithSpaces(num);
+        input.value = formatted;
+        input.dataset.originalValue = num.toString();
+        // Update with numeric value
+        updateIncomingPaymentField(parseInt(paymentId), 'sum_amount', num);
     }
+}
+
+// Format sum input on blur (deprecated - use handleSumInputBlur instead)
+function formatSumInput(input) {
+    handleSumInputBlur(input);
 }
 
 // Show notification
