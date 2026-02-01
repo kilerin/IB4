@@ -667,14 +667,54 @@ function sortTransactionsArray(transactions, field, direction) {
             // Sort by date
             aValue = new Date(a.created_at).getTime();
             bValue = new Date(b.created_at).getTime();
+        } else if (field === 'wallet') {
+            // Sort by wallet name
+            aValue = (a.wallet_name || '').toLowerCase();
+            bValue = (b.wallet_name || '').toLowerCase();
+        } else if (field === 'from_to') {
+            // Sort by counterparty name
+            aValue = (a.counterparty_name || '').toLowerCase();
+            bValue = (b.counterparty_name || '').toLowerCase();
+        } else if (field === 'type') {
+            // Sort by transaction type
+            aValue = (a.transaction_type || '').toLowerCase();
+            bValue = (b.transaction_type || '').toLowerCase();
+        } else if (field === 'comment') {
+            // Sort by comment
+            aValue = (a.comment || '').toLowerCase();
+            bValue = (b.comment || '').toLowerCase();
+        } else if (field === 'address') {
+            // Sort by address (from_address for incoming, to_address for outgoing)
+            const aAddr = a.direction === 'incoming' ? (a.from_address || '') : (a.to_address || '');
+            const bAddr = b.direction === 'incoming' ? (b.from_address || '') : (b.to_address || '');
+            aValue = aAddr.toLowerCase();
+            bValue = bAddr.toLowerCase();
         } else {
             return 0;
         }
         
-        if (direction === 'asc') {
-            return aValue > bValue ? 1 : aValue < bValue ? -1 : 0;
+        // Handle null/empty values - put them at the end
+        if (aValue === '' || aValue === null || aValue === undefined) {
+            return direction === 'asc' ? 1 : -1;
+        }
+        if (bValue === '' || bValue === null || bValue === undefined) {
+            return direction === 'asc' ? -1 : 1;
+        }
+        
+        // Compare values
+        if (typeof aValue === 'number' && typeof bValue === 'number') {
+            if (direction === 'asc') {
+                return aValue > bValue ? 1 : aValue < bValue ? -1 : 0;
+            } else {
+                return aValue < bValue ? 1 : aValue > bValue ? -1 : 0;
+            }
         } else {
-            return aValue < bValue ? 1 : aValue > bValue ? -1 : 0;
+            // String comparison
+            if (direction === 'asc') {
+                return aValue > bValue ? 1 : aValue < bValue ? -1 : 0;
+            } else {
+                return aValue < bValue ? 1 : aValue > bValue ? -1 : 0;
+            }
         }
     });
     

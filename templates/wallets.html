@@ -81,15 +81,25 @@
         <table>
             <thead>
                 <tr>
-                    <th class="sortable" data-sort="amount" style="cursor: pointer;">
+                    <th class="sortable" data-sort="amount" style="cursor: pointer;" onclick="sortTransactions('amount')">
                         AMOUNT <span class="sort-indicator"></span>
                     </th>
-                    <th>WALLET</th>
-                    <th>FROM/TO</th>
-                    <th>TYPE</th>
-                    <th>COMMENT</th>
-                    <th>ADDRESS</th>
-                    <th class="sortable" data-sort="date" style="cursor: pointer;">
+                    <th class="sortable" data-sort="wallet" style="cursor: pointer;" onclick="sortTransactions('wallet')">
+                        WALLET <span class="sort-indicator"></span>
+                    </th>
+                    <th class="sortable" data-sort="from_to" style="cursor: pointer;" onclick="sortTransactions('from_to')">
+                        FROM/TO <span class="sort-indicator"></span>
+                    </th>
+                    <th class="sortable" data-sort="type" style="cursor: pointer;" onclick="sortTransactions('type')">
+                        TYPE <span class="sort-indicator"></span>
+                    </th>
+                    <th class="sortable" data-sort="comment" style="cursor: pointer;" onclick="sortTransactions('comment')">
+                        COMMENT <span class="sort-indicator"></span>
+                    </th>
+                    <th class="sortable" data-sort="address" style="cursor: pointer;" onclick="sortTransactions('address')">
+                        ADDRESS <span class="sort-indicator"></span>
+                    </th>
+                    <th class="sortable" data-sort="date" style="cursor: pointer;" onclick="sortTransactions('date')">
                         DATE/TIME <span class="sort-indicator"></span>
                     </th>
                 </tr>
