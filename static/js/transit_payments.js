@@ -405,30 +405,46 @@ async function updateIncomingPaymentField(paymentId, field, value) {
             return;
         }
         
-        // Get current values from inputs
+        // Get current values from inputs safely
         const sumInput = inputs[0];
-        let sumValue = value;
+        let sumValue = 0;
+        
         if (field === 'sum_amount') {
-            // Use the provided value
-            sumValue = value;
-        } else if (sumInput.classList.contains('incoming-payment-sum')) {
-            // Use original value if available, otherwise parse current value
-            sumValue = sumInput.dataset.originalValue || parseSumValue(sumInput.value) || 0;
+            // Use the provided value, ensure it's a number
+            if (value === null || value === undefined || value === '') {
+                sumValue = 0;
+            } else {
+                const numValue = typeof value === 'string' ? parseFloat(value.replace(/\s/g, '').replace(',', '.')) : value;
+                sumValue = isNaN(numValue) ? 0 : numValue;
+            }
         } else {
-            sumValue = sumInput.value || 0;
+            // Get sum from input field
+            if (sumInput.classList.contains('incoming-payment-sum')) {
+                const rawValue = sumInput.dataset.originalValue || sumInput.value || '';
+                if (rawValue) {
+                    const cleaned = rawValue.toString().replace(/\s/g, '').replace(',', '.');
+                    const num = parseFloat(cleaned);
+                    sumValue = isNaN(num) ? 0 : num;
+                }
+            } else {
+                const num = parseFloat(sumInput.value || 0);
+                sumValue = isNaN(num) ? 0 : num;
+            }
         }
         
-        // Convert sum to number if it's a string number
-        if (sumValue && typeof sumValue === 'string' && !isNaN(parseFloat(sumValue))) {
-            sumValue = parseFloat(sumValue);
-        }
+        // Get other field values safely
+        const agent = (inputs[1] && inputs[1].value) ? inputs[1].value.trim() : '';
+        const fromAddress = (inputs[2] && inputs[2].value) ? inputs[2].value.trim() : '';
+        const date = (inputs[3] && inputs[3].value) ? inputs[3].value.trim() : '';
         
         const data = {
-            sum_amount: (field === 'sum_amount' ? value : (parseFloat(sumValue) || 0)),
-            agent: inputs[1].value || '',
-            from_address: inputs[2].value || '',
-            date: inputs[3].value || ''
+            sum_amount: sumValue,
+            agent: agent,
+            from_address: fromAddress,
+            date: date
         };
+        
+        console.log('Updating payment:', paymentId, 'with data:', data); // Debug
         
         const response = await fetch(`/api/incoming-payments/${paymentId}`, {
             method: 'PUT',
@@ -437,13 +453,13 @@ async function updateIncomingPaymentField(paymentId, field, value) {
         });
         
         if (!response.ok) {
-            const error = await response.json();
-            console.error('Update error:', error);
-            // Reload to restore correct values
-            if (selectedChannelId) {
-                await loadIncomingPayments(selectedChannelId);
-            }
+            const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+            console.error('Update error:', errorData);
+            // Don't reload immediately, let user see the error
+            throw new Error(errorData.error || 'Failed to update payment');
         } else {
+            const result = await response.json();
+            console.log('Update successful:', result); // Debug
             // Reload payments statistics to update "Incoming payments" column
             if (selectedChannelId) {
                 await loadChannelPayments(selectedChannelId);
@@ -451,9 +467,13 @@ async function updateIncomingPaymentField(paymentId, field, value) {
         }
     } catch (error) {
         console.error('Error updating payment:', error);
-        // Reload on error
-        if (selectedChannelId) {
-            await loadIncomingPayments(selectedChannelId);
+        // Show error but don't reload immediately - let user fix the value
+        // Only reload if it's a critical error
+        if (error.message && error.message.includes('404')) {
+            // Payment not found, reload the table
+            if (selectedChannelId) {
+                await loadIncomingPayments(selectedChannelId);
+            }
         }
     }
 }
@@ -597,18 +617,25 @@ function handleSumInputChange(input) {
 // Handle sum input blur - format and save
 function handleSumInputBlur(input) {
     const paymentId = input.dataset.paymentId;
-    if (!paymentId) return;
+    if (!paymentId) {
+        console.warn('No payment ID found for input');
+        return;
+    }
     
-    const rawValue = input.value.replace(/\s/g, '').replace(',', '.');
+    // Get raw value from input or dataset
+    let rawValue = input.value || '';
+    if (rawValue) {
+        rawValue = rawValue.replace(/\s/g, '').replace(',', '.');
+    }
     
     // Parse the value
     const num = rawValue ? parseFloat(rawValue) : 0;
     
-    if (isNaN(num) || num === 0) {
-        // If invalid or zero, clear the field
+    if (!rawValue || rawValue === '' || isNaN(num)) {
+        // If empty or invalid, set to 0 but keep field empty visually
         input.value = '';
-        input.dataset.originalValue = '';
-        // Update with zero value (not empty, as backend expects number)
+        input.dataset.originalValue = '0';
+        // Update with zero value
         updateIncomingPaymentField(parseInt(paymentId), 'sum_amount', 0);
     } else {
         // Format and save

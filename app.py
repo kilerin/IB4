@@ -2552,44 +2552,73 @@ def create_incoming_payment(channel_id):
 @app.route('/api/incoming-payments/<int:payment_id>', methods=['PUT'])
 def update_incoming_payment(payment_id):
     """Update an incoming payment"""
-    payment = IncomingPayment.query.get_or_404(payment_id)
-    data = request.json
-    
-    sum_amount = data.get('sum_amount')
-    agent = data.get('agent', '').strip()
-    from_address = data.get('from_address', '').strip()
-    date_str = data.get('date', '').strip()
-    
-    if sum_amount is not None:
-        try:
-            payment.sum_amount = float(sum_amount)
-        except (ValueError, TypeError):
-            return jsonify({'error': 'Invalid SUM amount'}), 400
-    
-    payment.agent = agent if agent else None
-    payment.from_address = from_address if from_address else None
-    
-    if date_str:
-        try:
-            payment.date = datetime.strptime(date_str, '%Y-%m-%d').date()
-        except ValueError:
-            return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD'}), 400
-    else:
-        payment.date = None
-    
-    payment.updated_at = datetime.utcnow()
-    db.session.commit()
-    
-    return jsonify({
-        'success': True,
-        'payment': {
-            'id': payment.id,
-            'sum_amount': payment.sum_amount,
-            'agent': payment.agent or '',
-            'from_address': payment.from_address or '',
-            'date': payment.date.strftime('%Y-%m-%d') if payment.date else ''
-        }
-    })
+    try:
+        payment = IncomingPayment.query.get_or_404(payment_id)
+        data = request.json
+        
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+        
+        sum_amount = data.get('sum_amount')
+        agent = data.get('agent', '')
+        from_address = data.get('from_address', '')
+        date_str = data.get('date', '')
+        
+        # Handle sum_amount - always update if provided
+        if sum_amount is not None:
+            try:
+                # Convert to float, handle empty string as 0
+                if sum_amount == '' or sum_amount is None:
+                    sum_amount = 0.0
+                else:
+                    sum_amount = float(sum_amount)
+                payment.sum_amount = sum_amount
+            except (ValueError, TypeError) as e:
+                print(f"Error converting sum_amount: {e}, value: {sum_amount}")
+                return jsonify({'error': f'Invalid SUM amount: {sum_amount}'}), 400
+        
+        # Handle agent and from_address - convert empty strings to empty strings (not None)
+        if isinstance(agent, str):
+            payment.agent = agent.strip() if agent.strip() else ''
+        else:
+            payment.agent = str(agent) if agent else ''
+        
+        if isinstance(from_address, str):
+            payment.from_address = from_address.strip() if from_address.strip() else ''
+        else:
+            payment.from_address = str(from_address) if from_address else ''
+        
+        # Handle date
+        if date_str and isinstance(date_str, str) and date_str.strip():
+            try:
+                payment.date = datetime.strptime(date_str.strip(), '%Y-%m-%d').date()
+            except ValueError as e:
+                print(f"Error parsing date: {e}, value: {date_str}")
+                return jsonify({'error': f'Invalid date format. Use YYYY-MM-DD, got: {date_str}'}), 400
+        else:
+            payment.date = None
+        
+        payment.updated_at = datetime.utcnow()
+        db.session.commit()
+        
+        print(f"Updated payment {payment_id}: sum={payment.sum_amount}, agent={payment.agent}, from={payment.from_address}, date={payment.date}")  # Debug
+        
+        return jsonify({
+            'success': True,
+            'payment': {
+                'id': payment.id,
+                'sum_amount': float(payment.sum_amount) if payment.sum_amount is not None else 0.0,
+                'agent': payment.agent if payment.agent else '',
+                'from_address': payment.from_address if payment.from_address else '',
+                'date': payment.date.strftime('%Y-%m-%d') if payment.date else ''
+            }
+        })
+    except Exception as e:
+        print(f"Error updating payment {payment_id}: {e}")
+        import traceback
+        traceback.print_exc()
+        db.session.rollback()
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
 
 @app.route('/api/incoming-payments/<int:payment_id>', methods=['DELETE'])
 def delete_incoming_payment(payment_id):
