@@ -1,23 +1,6 @@
 let sortableInstance = null;
 let currentSort = { field: null, direction: 'asc' }; // 'asc' or 'desc'
 
-// Make sortTransactions available globally
-window.sortTransactions = function(field) {
-    // Toggle direction if clicking the same field
-    if (currentSort.field === field) {
-        currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
-    } else {
-        currentSort.field = field;
-        currentSort.direction = 'asc';
-    }
-    
-    // Update sort indicators
-    updateSortIndicators();
-    
-    // Reload transactions to apply sort
-    loadTransactions();
-};
-
 // Load wallets on page load
 document.addEventListener('DOMContentLoaded', function() {
     // Restore toggle states from localStorage
