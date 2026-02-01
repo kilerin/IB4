@@ -2436,8 +2436,8 @@ def get_channel_payments(channel_id):
     agent_balance = getattr(channel, 'agent_balance', 0.0) or 0.0
     not_paid_orders = getattr(channel, 'not_paid_orders', 0) or 0
     
-    # Calculate Saldo: In - Out + Incoming payments + Agent Balance + Not paid orders
-    saldo = total_in - total_out + inc_pmts_sum + agent_balance + not_paid_orders
+    # Calculate Saldo: In - Out - Incoming payments - Agent Balance - Not paid orders
+    saldo = total_in - total_out - inc_pmts_sum - agent_balance - not_paid_orders
     
     return jsonify({
         'channel_id': channel.id,
