@@ -1,7 +1,7 @@
 from flask import Flask, render_template, jsonify, request, send_file, session, redirect, url_for
 from functools import wraps
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import func
+from sqlalchemy import func, case
 from datetime import datetime, timedelta
 import os
 import requests
@@ -130,6 +130,8 @@ class Channel(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(200), nullable=False)
     transaction_type = db.Column(db.String(50), nullable=False)  # Sell usdt, Buy usdt, Alex, Agent, Loan, Expence, Other, Transit
+    agent_balance = db.Column(db.Float, nullable=False, default=0.0)
+    not_paid_orders = db.Column(db.Integer, nullable=False, default=0)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -2307,6 +2309,8 @@ def get_channels():
             'id': ch.id,
             'name': ch.name,
             'transaction_type': ch.transaction_type,
+            'agent_balance': getattr(ch, 'agent_balance', 0.0),
+            'not_paid_orders': getattr(ch, 'not_paid_orders', 0),
             'created_at': ch.created_at.isoformat() if ch.created_at else None,
             'updated_at': ch.updated_at.isoformat() if ch.updated_at else None
         } for ch in channels]
@@ -2340,6 +2344,8 @@ def create_channel():
             'id': channel.id,
             'name': channel.name,
             'transaction_type': channel.transaction_type,
+            'agent_balance': getattr(channel, 'agent_balance', 0.0),
+            'not_paid_orders': getattr(channel, 'not_paid_orders', 0),
             'created_at': channel.created_at.isoformat() if channel.created_at else None,
             'updated_at': channel.updated_at.isoformat() if channel.updated_at else None
         }
@@ -2352,20 +2358,33 @@ def update_channel(channel_id):
     data = request.json
     name = data.get('name', '').strip()
     transaction_type = data.get('transaction_type', '').strip()
+    agent_balance = data.get('agent_balance')
+    not_paid_orders = data.get('not_paid_orders')
     
-    if not name:
-        return jsonify({'error': 'Channel name is required'}), 400
+    # Only validate name and transaction_type if they are being updated (not empty)
+    if name:
+        channel.name = name
     
-    if not transaction_type:
-        return jsonify({'error': 'Transaction type is required'}), 400
+    if transaction_type:
+        # Validate transaction type
+        valid_types = ['Sell usdt', 'Buy usdt', 'Alex', 'Agent', 'Loan', 'Expence', 'Other', 'Transit']
+        if transaction_type not in valid_types:
+            return jsonify({'error': 'Invalid transaction type'}), 400
+        channel.transaction_type = transaction_type
     
-    # Validate transaction type
-    valid_types = ['Sell usdt', 'Buy usdt', 'Alex', 'Agent', 'Loan', 'Expence', 'Other', 'Transit']
-    if transaction_type not in valid_types:
-        return jsonify({'error': 'Invalid transaction type'}), 400
+    # Update agent_balance and not_paid_orders if provided
+    if agent_balance is not None:
+        try:
+            channel.agent_balance = float(agent_balance)
+        except (ValueError, TypeError):
+            return jsonify({'error': 'Invalid agent_balance value'}), 400
     
-    channel.name = name
-    channel.transaction_type = transaction_type
+    if not_paid_orders is not None:
+        try:
+            channel.not_paid_orders = int(not_paid_orders)
+        except (ValueError, TypeError):
+            return jsonify({'error': 'Invalid not_paid_orders value'}), 400
+    
     channel.updated_at = datetime.utcnow()
     db.session.commit()
     
@@ -2375,6 +2394,8 @@ def update_channel(channel_id):
             'id': channel.id,
             'name': channel.name,
             'transaction_type': channel.transaction_type,
+            'agent_balance': getattr(channel, 'agent_balance', 0.0),
+            'not_paid_orders': getattr(channel, 'not_paid_orders', 0),
             'created_at': channel.created_at.isoformat() if channel.created_at else None,
             'updated_at': channel.updated_at.isoformat() if channel.updated_at else None
         }
@@ -2411,8 +2432,12 @@ def get_channel_payments(channel_id):
     incoming_payments = IncomingPayment.query.filter_by(channel_id=channel_id).all()
     inc_pmts_sum = sum(payment.sum_amount for payment in incoming_payments if payment.sum_amount)
     
-    agent_balance = 0.0  # Placeholder - needs business logic
-    orders = len(transactions)  # Total number of transactions
+    # Get agent_balance and not_paid_orders from channel
+    agent_balance = getattr(channel, 'agent_balance', 0.0) or 0.0
+    not_paid_orders = getattr(channel, 'not_paid_orders', 0) or 0
+    
+    # Calculate Saldo: In - Out + Incoming payments + Agent Balance + Not paid orders
+    saldo = total_in - total_out + inc_pmts_sum + agent_balance + not_paid_orders
     
     return jsonify({
         'channel_id': channel.id,
@@ -2420,8 +2445,9 @@ def get_channel_payments(channel_id):
         'in': round(total_in, 2),
         'out': round(total_out, 2),
         'inc_pmts': round(inc_pmts_sum, 2),  # Sum of all Incoming Payments
-        'agent_balance': agent_balance,
-        'orders': orders
+        'agent_balance': round(agent_balance, 2),
+        'not_paid_orders': not_paid_orders,
+        'saldo': round(saldo, 2)
     })
 
 @app.route('/api/channels/<int:channel_id>/incoming-payments', methods=['GET'])
@@ -2430,13 +2456,18 @@ def get_channel_incoming_payments(channel_id):
     channel = Channel.query.get_or_404(channel_id)
     
     # Sort by date ascending (oldest first), then by created_at ascending
-    # For SQLite compatibility, use case when date is null
-    from sqlalchemy import case
-    payments = IncomingPayment.query.filter_by(channel_id=channel_id).order_by(
-        case((IncomingPayment.date.is_(None), 1), else_=0),
-        IncomingPayment.date.asc(),
-        IncomingPayment.created_at.asc()
-    ).all()
+    # Payments without date go to the end
+    try:
+        # Try to sort with date first
+        payments_with_date = IncomingPayment.query.filter_by(channel_id=channel_id).filter(IncomingPayment.date.isnot(None)).order_by(IncomingPayment.date.asc(), IncomingPayment.created_at.asc()).all()
+        payments_without_date = IncomingPayment.query.filter_by(channel_id=channel_id).filter(IncomingPayment.date.is_(None)).order_by(IncomingPayment.created_at.asc()).all()
+        payments = payments_with_date + payments_without_date
+    except Exception as e:
+        # Fallback to simple sorting if date filtering doesn't work
+        print(f"Error in sorting: {e}")
+        payments = IncomingPayment.query.filter_by(channel_id=channel_id).order_by(
+            IncomingPayment.created_at.asc()
+        ).all()
     
     incoming_payments = []
     for payment in payments:

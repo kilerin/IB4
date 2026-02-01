@@ -867,6 +867,35 @@ tbody tr:hover {
     border: none !important;
 }
 
+.transit-additional-panel {
+    margin-bottom: 0;
+    border: none !important;
+}
+
+.transit-additional-panel .form-input {
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+
+.transit-additional-panel .form-input:focus {
+    outline: none;
+    border-color: var(--accent-color);
+    background-color: var(--bg-secondary);
+}
+
+/* Убираем стрелки в числовых полях */
+.transit-number-input::-webkit-outer-spin-button,
+.transit-number-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.transit-number-input[type="number"] {
+    -moz-appearance: textfield;
+}
+
 /* Reserves */
 .btn-reserve {
     margin-top: 8px;

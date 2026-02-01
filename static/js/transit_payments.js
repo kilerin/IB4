@@ -15,6 +15,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         selectedChannelId = channelId;
         await loadChannelPayments(channelId);
         await loadIncomingPayments(channelId);
+        await loadChannelAdditionalInfo(channelId);
         loadChannels(); // Refresh to update selected state
     } else {
         // Clear incoming payments table if no channel selected
@@ -25,6 +26,9 @@ document.addEventListener('DOMContentLoaded', async function() {
                 </td>
             </tr>
         `;
+        // Clear additional info fields
+        document.getElementById('agentBalanceInput').value = '';
+        document.getElementById('notPaidOrdersInput').value = '';
     }
     
     // Close modals when clicking outside
@@ -101,7 +105,166 @@ async function selectChannel(channelId) {
     localStorage.setItem('lastSelectedChannelId', channelId.toString());
     await loadChannelPayments(channelId);
     await loadIncomingPayments(channelId);
+    await loadChannelAdditionalInfo(channelId);
     loadChannels(); // Refresh to update selected state
+}
+
+// Load additional info (agent balance, not paid orders) for a channel
+async function loadChannelAdditionalInfo(channelId) {
+    try {
+        const response = await fetch(`/api/channels`);
+        const data = await response.json();
+        const channel = data.channels.find(c => c.id === channelId);
+        if (channel) {
+            document.getElementById('agentBalanceInput').value = formatNumberWithSpaces(channel.agent_balance || 0, 2);
+            document.getElementById('notPaidOrdersInput').value = formatNumberWithSpaces(channel.not_paid_orders || 0, 0);
+        }
+    } catch (error) {
+        console.error('Error loading channel additional info:', error);
+    }
+}
+
+// Format number with space as thousands separator
+function formatNumberWithSpaces(value, decimals = 2) {
+    if (value === null || value === undefined || value === '') return '0';
+    const num = parseFloat(value);
+    if (isNaN(num)) return '0';
+    
+    // Format with specified decimals
+    const formatted = num.toFixed(decimals);
+    
+    // Split into integer and decimal parts
+    const parts = formatted.split('.');
+    const integerPart = parts[0];
+    const decimalPart = decimals > 0 ? '.' + parts[1] : '';
+    
+    // Add space as thousands separator
+    const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+    
+    return formattedInteger + decimalPart;
+}
+
+// Parse formatted number (remove spaces and convert to number)
+function parseFormattedNumber(value) {
+    if (!value || value === '') return 0;
+    // Remove spaces and convert to number
+    const cleaned = value.toString().replace(/\s/g, '').replace(',', '.');
+    const num = parseFloat(cleaned);
+    return isNaN(num) ? 0 : num;
+}
+
+// Format Agent Balance input on focus
+function formatAgentBalanceInput(onFocus) {
+    const input = document.getElementById('agentBalanceInput');
+    if (onFocus) {
+        // On focus: show raw value without formatting
+        const value = parseFormattedNumber(input.value);
+        input.value = value === 0 ? '' : value.toString();
+    }
+}
+
+// Format Not paid orders input on focus
+function formatNotPaidOrdersInput(onFocus) {
+    const input = document.getElementById('notPaidOrdersInput');
+    if (onFocus) {
+        // On focus: show raw value without formatting
+        const value = parseFormattedNumber(input.value);
+        input.value = value === 0 ? '' : Math.floor(value).toString();
+    }
+}
+
+// Format and update Agent Balance
+async function formatAndUpdateAgentBalance() {
+    const input = document.getElementById('agentBalanceInput');
+    const agentBalance = parseFormattedNumber(input.value);
+    input.value = formatNumberWithSpaces(agentBalance, 2);
+    await updateChannelAgentBalance();
+}
+
+// Format and update Not paid orders
+async function formatAndUpdateNotPaidOrders() {
+    const input = document.getElementById('notPaidOrdersInput');
+    const notPaidOrders = Math.floor(parseFormattedNumber(input.value));
+    input.value = formatNumberWithSpaces(notPaidOrders, 0);
+    await updateChannelNotPaidOrders();
+}
+
+// Update channel agent balance
+async function updateChannelAgentBalance() {
+    if (!selectedChannelId) return;
+    
+    const input = document.getElementById('agentBalanceInput');
+    const agentBalance = parseFormattedNumber(input.value);
+    
+    try {
+        const response = await fetch(`/api/channels/${selectedChannelId}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                agent_balance: agentBalance
+            })
+        });
+        
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Failed to update agent balance');
+        }
+        
+        // Reload channel data to get updated values
+        const channelResponse = await fetch(`/api/channels`);
+        const channelData = await channelResponse.json();
+        const channel = channelData.channels.find(c => c.id === selectedChannelId);
+        if (channel) {
+            document.getElementById('agentBalanceInput').value = formatNumberWithSpaces(channel.agent_balance || 0, 2);
+        }
+        
+        // Reload payments table to update Saldo
+        await loadChannelPayments(selectedChannelId);
+    } catch (error) {
+        console.error('Error updating agent balance:', error);
+        showNotification('Error updating agent balance', 'error');
+    }
+}
+
+// Update channel not paid orders
+async function updateChannelNotPaidOrders() {
+    if (!selectedChannelId) return;
+    
+    const input = document.getElementById('notPaidOrdersInput');
+    const notPaidOrders = Math.floor(parseFormattedNumber(input.value));
+    
+    try {
+        const response = await fetch(`/api/channels/${selectedChannelId}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                not_paid_orders: notPaidOrders
+            })
+        });
+        
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Failed to update not paid orders');
+        }
+        
+        // Reload channel data to get updated values
+        const channelResponse = await fetch(`/api/channels`);
+        const channelData = await channelResponse.json();
+        const channel = channelData.channels.find(c => c.id === selectedChannelId);
+        if (channel) {
+            document.getElementById('notPaidOrdersInput').value = formatNumberWithSpaces(channel.not_paid_orders || 0, 0);
+        }
+        
+        // Reload payments table to update Saldo
+        await loadChannelPayments(selectedChannelId);
+    } catch (error) {
+        console.error('Error updating not paid orders:', error);
+        showNotification('Error updating not paid orders', 'error');
+    }
 }
 
 // Load incoming payments for a channel
@@ -318,7 +481,7 @@ function displayPayments(data) {
             <td>${formatAmount(data.out)}</td>
             <td>${formatAmount(data.inc_pmts)}</td>
             <td>${formatAmount(data.agent_balance)}</td>
-            <td>${data.orders}</td>
+            <td>${formatAmount(data.saldo)}</td>
         </tr>
     `;
 }

@@ -14,29 +14,48 @@
     </div>
 
     <!-- Payments Panel (в центре) -->
-    <div class="card transit-payments-panel">
-        <div class="card-header">
-            <h2 class="card-title" id="paymentsTableTitle">Payments</h2>
+    <div style="display: flex; flex-direction: column; gap: 20px; flex: 1;">
+        <div class="card transit-payments-panel">
+            <div class="card-header">
+                <h2 class="card-title" id="paymentsTableTitle">Payments</h2>
+            </div>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>In</th>
+                            <th>Out</th>
+                            <th>Incoming payments</th>
+                            <th>Profit</th>
+                            <th>Saldo</th>
+                        </tr>
+                    </thead>
+                    <tbody id="paymentsTable">
+                        <tr>
+                            <td colspan="5" style="text-align: center; padding: 20px; color: var(--text-secondary);">
+                                Select a channel to view payments
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
-        <div class="table-container">
-            <table>
-                <thead>
-                    <tr>
-                        <th>In</th>
-                        <th>Out</th>
-                        <th>Incoming payments</th>
-                        <th>Agent balance</th>
-                        <th>Orders</th>
-                    </tr>
-                </thead>
-                <tbody id="paymentsTable">
-                    <tr>
-                        <td colspan="5" style="text-align: center; padding: 20px; color: var(--text-secondary);">
-                            Select a channel to view payments
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
+        
+        <!-- Additional Info Panel -->
+        <div class="card transit-additional-panel">
+            <div class="card-header">
+                <h2 class="card-title">Additional Info</h2>
+            </div>
+            <div style="display: flex; gap: 30px; padding: 15px;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <label style="font-size: 14px; color: var(--text-secondary); white-space: nowrap;">Agent Balance:</label>
+                    <input type="text" id="agentBalanceInput" class="form-input transit-number-input" style="width: 150px; padding: 6px; font-size: 14px;" onblur="formatAndUpdateAgentBalance()" onfocus="formatAgentBalanceInput(true)">
+                </div>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <label style="font-size: 14px; color: var(--text-secondary); white-space: nowrap;">Not paid orders:</label>
+                    <input type="text" id="notPaidOrdersInput" class="form-input transit-number-input" style="width: 120px; padding: 6px; font-size: 14px;" onblur="formatAndUpdateNotPaidOrders()" onfocus="formatNotPaidOrdersInput(true)">
+                </div>
+            </div>
         </div>
     </div>
 
