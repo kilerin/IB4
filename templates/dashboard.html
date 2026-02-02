@@ -47,6 +47,9 @@
                     <option value="Transit">Transit</option>
                     <option value="" selected>All Types</option>
                 </select>
+                <button id="refreshChartBtn" class="btn btn-secondary" style="padding: 6px 15px; margin-left: 10px;" onclick="refreshCharts()">
+                    🔄 Обновить график
+                </button>
                 <button id="exportExcelBtn" class="btn btn-primary" style="padding: 6px 15px; margin-left: 10px;">
                     📥 Выгрузить в Excel
                 </button>
@@ -72,10 +75,13 @@
                     <option value="365" selected>Last Year</option>
                 </select>
                 <label for="directionFilter" class="form-label" style="margin-right: 10px;">Direction:</label>
-                <select id="directionFilter" class="form-input" style="width: 150px; padding: 6px 10px;">
+                <select id="directionFilter" class="form-input" style="width: 150px; padding: 6px 10px; margin-right: 20px;">
                     <option value="incoming" selected>Incoming</option>
                     <option value="outgoing">Outgoing</option>
                 </select>
+                <button id="refreshTypesChartBtn" class="btn btn-secondary" style="padding: 6px 15px; margin-left: 10px;" onclick="refreshCharts()">
+                    🔄 Обновить график
+                </button>
             </div>
         </div>
     </div>

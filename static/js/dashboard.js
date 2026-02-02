@@ -175,6 +175,64 @@ function formatAmountShort(amount) {
     }
 }
 
+// Refresh charts function - reloads data from transactions and rebuilds charts
+async function refreshCharts() {
+    try {
+        // Show loading state
+        const refreshBtn = document.getElementById('refreshChartBtn');
+        const refreshTypesBtn = document.getElementById('refreshTypesChartBtn');
+        
+        if (refreshBtn) {
+            refreshBtn.disabled = true;
+            refreshBtn.textContent = '🔄 Обновление...';
+        }
+        if (refreshTypesBtn) {
+            refreshTypesBtn.disabled = true;
+            refreshTypesBtn.textContent = '🔄 Обновление...';
+        }
+        
+        // Reload both charts
+        await Promise.all([
+            loadDashboardData(),
+            loadTransactionTypesData()
+        ]);
+        
+        // Restore button state
+        if (refreshBtn) {
+            refreshBtn.disabled = false;
+            refreshBtn.textContent = '🔄 Обновить график';
+        }
+        if (refreshTypesBtn) {
+            refreshTypesBtn.disabled = false;
+            refreshTypesBtn.textContent = '🔄 Обновить график';
+        }
+        
+        // Show notification
+        if (typeof showNotification === 'function') {
+            showNotification('Графики обновлены');
+        } else {
+            console.log('Графики обновлены');
+        }
+    } catch (error) {
+        console.error('Error refreshing charts:', error);
+        if (typeof showNotification === 'function') {
+            showNotification('Ошибка при обновлении графиков', 'error');
+        }
+        
+        // Restore button state on error
+        const refreshBtn = document.getElementById('refreshChartBtn');
+        const refreshTypesBtn = document.getElementById('refreshTypesChartBtn');
+        if (refreshBtn) {
+            refreshBtn.disabled = false;
+            refreshBtn.textContent = '🔄 Обновить график';
+        }
+        if (refreshTypesBtn) {
+            refreshTypesBtn.disabled = false;
+            refreshTypesBtn.textContent = '🔄 Обновить график';
+        }
+    }
+}
+
 // Export to Excel function
 function exportToExcel() {
     const filter = document.getElementById('transactionTypeFilter');
