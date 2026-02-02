@@ -884,6 +884,17 @@ tbody tr:hover {
     border: none !important;
 }
 
+/* Align numeric values to the right in Payments table */
+.transit-payments-panel table td:not(:first-child),
+.transit-payments-panel table th:not(:first-child) {
+    text-align: right;
+}
+
+.transit-payments-panel table td:first-child,
+.transit-payments-panel table th:first-child {
+    text-align: left;
+}
+
 .transit-incoming-panel {
     flex: 0 0 400px;
     width: 400px;

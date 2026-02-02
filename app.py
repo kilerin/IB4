@@ -1007,34 +1007,53 @@ def reset_aml_checking(wallet_id):
 
 @app.route('/api/dashboard/weekly-stats', methods=['GET'])
 def get_weekly_stats():
-    """Get weekly statistics for the last 3 months filtered by transaction type"""
+    """Get weekly statistics filtered by transaction type"""
     from datetime import datetime, timedelta
     from sqlalchemy import func, extract
     
     transaction_type = request.args.get('transaction_type', '')
-    period_days = request.args.get('period', '365')
+    period_days = request.args.get('period', '0')
     
+    # Handle "All time" (period_days = 0)
+    use_all_time = False
     try:
         period_days = int(period_days)
-        # Limit period to reasonable range (1 day to 2 years)
-        period_days = max(1, min(period_days, 730))
+        if period_days == 0:
+            use_all_time = True
+        else:
+            # Limit period to reasonable range (1 day to 2 years)
+            period_days = max(1, min(period_days, 730))
     except (ValueError, TypeError):
-        period_days = 90
+        use_all_time = True
     
-    # Calculate date range based on selected period
+    # Calculate date range based on selected period (for weekly breakdown)
     end_date = datetime.utcnow()
-    start_date = end_date - timedelta(days=period_days)
+    if use_all_time:
+        # For "All time", get the earliest transaction date or use a very old date
+        earliest_tx = Transaction.query.order_by(Transaction.created_at.asc()).first()
+        if earliest_tx:
+            start_date = earliest_tx.created_at.replace(hour=0, minute=0, second=0, microsecond=0)
+        else:
+            start_date = end_date - timedelta(days=365)  # Default to 1 year if no transactions
+    else:
+        start_date = end_date - timedelta(days=period_days)
     
-    # Generate all weeks in the date range
-    # Start from the Monday of the week containing start_date
+    # Extend end_date to end of current week (Sunday 23:59:59) to include all transactions in current week
+    days_until_sunday = 6 - end_date.weekday()  # 0=Monday, 6=Sunday
+    end_of_current_week = end_date + timedelta(days=days_until_sunday)
+    end_of_current_week = end_of_current_week.replace(hour=23, minute=59, second=59, microsecond=999999)
+    
+    # Generate all weeks in the date range (for weekly breakdown)
+    # Include the current week fully (even if it extends beyond end_date)
     days_since_monday = start_date.weekday()
     first_week_start = start_date - timedelta(days=days_since_monday)
     first_week_start = first_week_start.replace(hour=0, minute=0, second=0, microsecond=0)
     
     # Initialize all weeks with zeros
+    # Include weeks up to end of current week
     weekly_data = {}
     current_week_start = first_week_start
-    while current_week_start <= end_date:
+    while current_week_start <= end_of_current_week:
         week_key = current_week_start.strftime('%Y-%m-%d')
         weekly_data[week_key] = {
             'week_start': current_week_start,
@@ -1044,11 +1063,62 @@ def get_weekly_stats():
         # Move to next week (add 7 days)
         current_week_start += timedelta(days=7)
     
-    # Query transactions filtered by type and date range
+    # Query ALL transactions filtered by type (for total_in and total_out)
+    # This ensures total_in - total_out matches wallet balances calculated from transactions
+    # Exclude own fund transfers (internal transfers between wallets)
+    query_all = Transaction.query.filter(
+        Transaction.currency == 'USDT',  # Only USDT transactions
+        (Transaction.comment != 'Own fund transfer') | (Transaction.comment == None)
+    )
+    
+    if transaction_type and transaction_type.strip():
+        query_all = query_all.filter(Transaction.transaction_type == transaction_type)
+    
+    all_transactions = query_all.all()
+    
+    # Calculate total_in and total_out from ALL transactions (not filtered by date)
+    # Exclude own fund transfers
+    total_in = 0.0
+    total_out = 0.0
+    
+    for tx in all_transactions:
+        # Skip own fund transfers (should already be filtered in query, but double-check)
+        if tx.comment == 'Own fund transfer':
+            continue
+        if tx.direction == 'incoming':
+            total_in += tx.amount
+        elif tx.direction == 'outgoing':
+            total_out += tx.amount
+    
+    # Calculate wallet balances from transactions (for comparison)
+    # Sum of all incoming minus all outgoing per wallet
+    # Exclude own fund transfers
+    wallet_balances_from_tx = {}
+    for tx in all_transactions:
+        # Skip own fund transfers (should already be filtered in query, but double-check)
+        if tx.comment == 'Own fund transfer':
+            continue
+        if tx.wallet_id not in wallet_balances_from_tx:
+            wallet_balances_from_tx[tx.wallet_id] = 0.0
+        if tx.direction == 'incoming':
+            wallet_balances_from_tx[tx.wallet_id] += tx.amount
+        elif tx.direction == 'outgoing':
+            wallet_balances_from_tx[tx.wallet_id] -= tx.amount
+    
+    # Sum balances from transactions (only non-hidden wallets)
+    total_wallet_balance_from_tx = sum(
+        balance for wallet_id, balance in wallet_balances_from_tx.items()
+        if Wallet.query.get(wallet_id) and not Wallet.query.get(wallet_id).is_hidden
+    )
+    
+    # Query transactions filtered by type and date range (for weekly breakdown)
+    # Use end_of_current_week to include all transactions in the current week
+    # Exclude own fund transfers (internal transfers between wallets)
     query = Transaction.query.filter(
         Transaction.created_at >= start_date,
-        Transaction.created_at <= end_date,
-        Transaction.currency == 'USDT'  # Only USDT transactions
+        Transaction.created_at <= end_of_current_week,
+        Transaction.currency == 'USDT',  # Only USDT transactions
+        (Transaction.comment != 'Own fund transfer') | (Transaction.comment == None)
     )
     
     if transaction_type and transaction_type.strip():
@@ -1056,11 +1126,12 @@ def get_weekly_stats():
     
     transactions = query.all()
     
-    # Fill in transaction data
-    total_in = 0.0
-    total_out = 0.0
-    
+    # Fill in weekly transaction data
     for tx in transactions:
+        # Skip own fund transfers (should already be filtered in query, but double-check)
+        if tx.comment == 'Own fund transfer':
+            continue
+            
         # Get week start date (Monday)
         # weekday() returns 0 for Monday, 6 for Sunday
         days_since_monday = tx.created_at.weekday()
@@ -1069,29 +1140,41 @@ def get_weekly_stats():
         week_start = week_start.replace(hour=0, minute=0, second=0, microsecond=0)
         week_key = week_start.strftime('%Y-%m-%d')
         
-        # Only process if week is in our range
-        if week_key in weekly_data:
-            if tx.direction == 'incoming':
-                weekly_data[week_key]['incoming'] += tx.amount
-                total_in += tx.amount
-            elif tx.direction == 'outgoing':
-                weekly_data[week_key]['outgoing'] += tx.amount
-                total_out += tx.amount
+        # Create week entry if it doesn't exist (for transactions outside the main range)
+        if week_key not in weekly_data:
+            weekly_data[week_key] = {
+                'week_start': week_start,
+                'incoming': 0.0,
+                'outgoing': 0.0
+            }
+        
+        # Process transaction
+        if tx.direction == 'incoming':
+            weekly_data[week_key]['incoming'] += tx.amount
+        elif tx.direction == 'outgoing':
+            weekly_data[week_key]['outgoing'] += tx.amount
     
     # Convert to list sorted by week
+    # Filter out weeks that are completely outside the selected period
     weeks = []
     for week_key in sorted(weekly_data.keys()):
         week_data = weekly_data[week_key]
-        # Get week number in year (ISO week number)
-        week_number = week_data['week_start'].isocalendar()[1]
-        week_label = f"W{week_number}"
+        week_start = week_data['week_start']
         
-        weeks.append({
-            'week': week_data['week_start'].strftime('%Y-%m-%d'),
-            'week_label': week_label,
-            'incoming': round(week_data['incoming'], 2),
-            'outgoing': round(week_data['outgoing'], 2)
-        })
+        # Only include weeks that overlap with the selected period
+        # A week overlaps if its start is before end_date or its end (Sunday) is after start_date
+        week_end = week_start + timedelta(days=6, hours=23, minutes=59, seconds=59)
+        if week_end >= start_date and week_start <= end_date:
+            # Get week number in year (ISO week number)
+            week_number = week_data['week_start'].isocalendar()[1]
+            week_label = f"W{week_number}"
+            
+            weeks.append({
+                'week': week_data['week_start'].strftime('%Y-%m-%d'),
+                'week_label': week_label,
+                'incoming': round(week_data['incoming'], 2),
+                'outgoing': round(week_data['outgoing'], 2)
+            })
     
     delta = round(total_in - total_out, 2)
     
@@ -1100,6 +1183,7 @@ def get_weekly_stats():
         'total_in': round(total_in, 2),
         'total_out': round(total_out, 2),
         'delta': delta,
+        'wallet_balance_from_tx': round(total_wallet_balance_from_tx, 2),  # Balance calculated from transactions
         'transaction_type': transaction_type
     })
 
@@ -1122,10 +1206,12 @@ def export_weekly_stats_excel():
     start_date = end_date - timedelta(days=period_days)
     
     # Query transactions filtered by type and date range
+    # Exclude own fund transfers (internal transfers between wallets)
     query = Transaction.query.filter(
         Transaction.created_at >= start_date,
         Transaction.created_at <= end_date,
-        Transaction.currency == 'USDT'
+        Transaction.currency == 'USDT',
+        (Transaction.comment != 'Own fund transfer') | (Transaction.comment == None)
     ).order_by(Transaction.created_at)
     
     if transaction_type and transaction_type.strip():
@@ -1137,6 +1223,10 @@ def export_weekly_stats_excel():
     daily_data = defaultdict(lambda: {'in': 0.0, 'out': 0.0})
     
     for tx in transactions:
+        # Skip own fund transfers (should already be filtered in query, but double-check)
+        if tx.comment == 'Own fund transfer':
+            continue
+            
         # Get date without time
         tx_date = tx.created_at.date()
         date_key = tx_date.strftime('%Y-%m-%d')
@@ -2412,7 +2502,7 @@ def delete_channel(channel_id):
 
 @app.route('/api/channels/<int:channel_id>/payments', methods=['GET'])
 def get_channel_payments(channel_id):
-    """Get payment statistics for a channel"""
+    """Get payment statistics for a channel with individual transactions and incoming payments"""
     channel = Channel.query.get_or_404(channel_id)
     
     # Get all transactions with matching transaction_type
@@ -2421,33 +2511,93 @@ def get_channel_payments(channel_id):
         currency='USDT'
     ).all()
     
-    # Calculate statistics
-    total_in = sum(tx.amount for tx in transactions if tx.direction == 'incoming')
-    total_out = sum(tx.amount for tx in transactions if tx.direction == 'outgoing')
-    
-    # Calculate incoming payments count from transactions
-    inc_pmts_count = len([tx for tx in transactions if tx.direction == 'incoming'])
-    
-    # Calculate sum of all Incoming Payments from IncomingPayment table
+    # Get all incoming payments (each as separate row)
     incoming_payments = IncomingPayment.query.filter_by(channel_id=channel_id).all()
-    inc_pmts_sum = sum(payment.sum_amount for payment in incoming_payments if payment.sum_amount)
     
     # Get agent_balance and not_paid_orders from channel
     agent_balance = getattr(channel, 'agent_balance', 0.0) or 0.0
     not_paid_orders = getattr(channel, 'not_paid_orders', 0) or 0
     
-    # Calculate Saldo: In - Out - Incoming payments - Agent Balance - Not paid orders
-    saldo = total_in - total_out - inc_pmts_sum - agent_balance - not_paid_orders
+    # Build list of all rows (transactions + incoming payments)
+    all_rows = []
+    
+    # Add transaction rows
+    for tx in transactions:
+        tx_date = tx.created_at.date()
+        all_rows.append({
+            'type': 'transaction',
+            'date': tx_date,
+            'sort_datetime': tx.created_at,  # For sorting - use transaction datetime
+            'in': tx.amount if tx.direction == 'incoming' else 0.0,
+            'out': tx.amount if tx.direction == 'outgoing' else 0.0,
+            'incoming_payment': 0.0,
+            'profit': 0.0
+        })
+    
+    # Add incoming payment rows (each as separate row)
+    for payment in incoming_payments:
+        # Use payment.date if available, otherwise use created_at date
+        if payment.date:
+            payment_date = payment.date
+            # Create datetime from date for sorting (use start of day)
+            from datetime import datetime, time
+            payment_sort_datetime = datetime.combine(payment_date, time.min)
+        else:
+            payment_date = payment.created_at.date()
+            payment_sort_datetime = payment.created_at
+        
+        all_rows.append({
+            'type': 'incoming_payment',
+            'date': payment_date,
+            'sort_datetime': payment_sort_datetime,  # For sorting - use payment.date or created_at
+            'in': 0.0,
+            'out': 0.0,
+            'incoming_payment': payment.sum_amount or 0.0,
+            'profit': 0.0
+        })
+    
+    # Sort by sort_datetime ascending (oldest first) for saldo calculation
+    # If same datetime, transactions come before incoming payments
+    all_rows.sort(key=lambda x: (x['sort_datetime'], 0 if x['type'] == 'transaction' else 1))
+    
+    # Calculate saldo for each row (from oldest to newest)
+    payment_rows = []
+    cumulative_saldo = 0.0  # Start with 0, will accumulate
+    
+    for row in all_rows:
+        # Calculate saldo: previous saldo + in - out - incoming payment - profit
+        cumulative_saldo = cumulative_saldo + row['in'] - row['out'] - row['incoming_payment'] - row['profit']
+        
+        payment_rows.append({
+            'date': row['date'].isoformat(),
+            'in': round(row['in'], 2),
+            'out': round(row['out'], 2),
+            'incoming_payment': round(row['incoming_payment'], 2),
+            'profit': round(row['profit'], 2),
+            'saldo': round(cumulative_saldo, 2)
+        })
+    
+    # Reverse the list to show newest rows first
+    payment_rows.reverse()
+    
+    # Calculate totals
+    total_in = sum(tx.amount for tx in transactions if tx.direction == 'incoming')
+    total_out = sum(tx.amount for tx in transactions if tx.direction == 'outgoing')
+    inc_pmts_sum = sum(payment.sum_amount for payment in incoming_payments if payment.sum_amount)
+    
+    # Final saldo includes agent_balance and not_paid_orders
+    final_saldo = cumulative_saldo - agent_balance - not_paid_orders
     
     return jsonify({
         'channel_id': channel.id,
         'channel_name': channel.name,
         'in': round(total_in, 2),
         'out': round(total_out, 2),
-        'inc_pmts': round(inc_pmts_sum, 2),  # Sum of all Incoming Payments
+        'inc_pmts': round(inc_pmts_sum, 2),
         'agent_balance': round(agent_balance, 2),
         'not_paid_orders': not_paid_orders,
-        'saldo': round(saldo, 2)
+        'saldo': round(final_saldo, 2),
+        'payment_rows': payment_rows  # List of individual rows (transactions + incoming payments)
     })
 
 @app.route('/api/channels/<int:channel_id>/incoming-payments', methods=['GET'])

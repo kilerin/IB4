@@ -109,7 +109,7 @@ async function selectChannel(channelId) {
     loadChannels(); // Refresh to update selected state
 }
 
-// Load additional info (agent balance, not paid orders) for a channel
+// Load additional info (agent balance, customer balance) for a channel
 async function loadChannelAdditionalInfo(channelId) {
     try {
         const response = await fetch(`/api/channels`);
@@ -163,7 +163,7 @@ function formatAgentBalanceInput(onFocus) {
     }
 }
 
-// Format Not paid orders input on focus
+// Format Customer balance input on focus
 function formatNotPaidOrdersInput(onFocus) {
     const input = document.getElementById('notPaidOrdersInput');
     if (onFocus) {
@@ -181,7 +181,7 @@ async function formatAndUpdateAgentBalance() {
     await updateChannelAgentBalance();
 }
 
-// Format and update Not paid orders
+// Format and update Customer balance
 async function formatAndUpdateNotPaidOrders() {
     const input = document.getElementById('notPaidOrdersInput');
     const notPaidOrders = Math.floor(parseFormattedNumber(input.value));
@@ -228,7 +228,7 @@ async function updateChannelAgentBalance() {
     }
 }
 
-// Update channel not paid orders
+// Update channel customer balance
 async function updateChannelNotPaidOrders() {
     if (!selectedChannelId) return;
     
@@ -248,7 +248,7 @@ async function updateChannelNotPaidOrders() {
         
         if (!response.ok) {
             const error = await response.json();
-            throw new Error(error.error || 'Failed to update not paid orders');
+            throw new Error(error.error || 'Failed to update customer balance');
         }
         
         // Reload channel data to get updated values
@@ -262,8 +262,8 @@ async function updateChannelNotPaidOrders() {
         // Reload payments table to update Saldo
         await loadChannelPayments(selectedChannelId);
     } catch (error) {
-        console.error('Error updating not paid orders:', error);
-        showNotification('Error updating not paid orders', 'error');
+        console.error('Error updating customer balance:', error);
+        showNotification('Error updating customer balance', 'error');
     }
 }
 
@@ -529,15 +529,49 @@ function displayPayments(data) {
     
     paymentsTableTitle.textContent = data.channel_name || 'Payments';
     
-    paymentsTable.innerHTML = `
-        <tr>
-            <td>${formatAmount(data.in)}</td>
-            <td>${formatAmount(data.out)}</td>
-            <td>${formatAmount(data.inc_pmts)}</td>
-            <td>${formatAmount(data.agent_balance)}</td>
-            <td>${formatAmount(data.saldo)}</td>
+    // Update Agent Balance and Customer balance fields in header
+    const agentBalanceInput = document.getElementById('agentBalanceInput');
+    const notPaidOrdersInput = document.getElementById('notPaidOrdersInput');
+    if (agentBalanceInput) {
+        agentBalanceInput.value = formatNumberWithSpaces(data.agent_balance || 0, 2);
+    }
+    if (notPaidOrdersInput) {
+        notPaidOrdersInput.value = formatNumberWithSpaces(data.not_paid_orders || 0, 0);
+    }
+    
+    let rowsHtml = '';
+    
+    // Always add total row at the beginning
+    rowsHtml += `
+        <tr style="font-weight: bold; background-color: var(--bg-secondary);">
+            <td>Total</td>
+            <td>${formatAmount(data.in || 0)}</td>
+            <td>${formatAmount(data.out || 0)}</td>
+            <td>${formatAmount(data.inc_pmts || 0)}</td>
+            <td>${formatAmount(data.agent_balance || 0)}</td>
+            <td>${formatAmount(data.saldo || 0)}</td>
         </tr>
     `;
+    
+    // Display individual transaction rows if available
+    if (data.payment_rows && data.payment_rows.length > 0) {
+        // Display each transaction row (already sorted newest first)
+        for (const row of data.payment_rows) {
+            const dateStr = row.date ? new Date(row.date + 'T00:00:00').toLocaleDateString('ru-RU') : '';
+            rowsHtml += `
+                <tr>
+                    <td>${dateStr}</td>
+                    <td>${formatAmount(row.in)}</td>
+                    <td>${formatAmount(row.out)}</td>
+                    <td>${formatAmount(row.incoming_payment)}</td>
+                    <td>${formatAmount(row.profit)}</td>
+                    <td>${formatAmount(row.saldo)}</td>
+                </tr>
+            `;
+        }
+    }
+    
+    paymentsTable.innerHTML = rowsHtml;
 }
 
 // Load incoming payments for a channel
@@ -554,8 +588,10 @@ async function loadIncomingPayments(channelId) {
 
 // Format amount for display
 function formatAmount(amount) {
-    if (amount === null || amount === undefined) return '0.00';
-    return parseFloat(amount).toLocaleString('ru-RU', {
+    if (amount === null || amount === undefined) return '-';
+    const num = parseFloat(amount);
+    if (isNaN(num) || num === 0) return '-';
+    return num.toLocaleString('ru-RU', {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2
     });

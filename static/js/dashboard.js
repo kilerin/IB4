@@ -50,7 +50,7 @@ async function loadDashboardData() {
     const filter = document.getElementById('transactionTypeFilter');
     const periodFilter = document.getElementById('periodFilter');
     const transactionType = filter ? filter.value : '';
-    const period = periodFilter ? periodFilter.value : '365';
+    const period = periodFilter ? periodFilter.value : '0';
     
     try {
         const response = await fetch(`/api/dashboard/weekly-stats?transaction_type=${encodeURIComponent(transactionType)}&period=${encodeURIComponent(period)}`);
@@ -70,6 +70,7 @@ function updateStats(data) {
     const totalIn = Math.round(data.total_in || 0);
     const totalOut = Math.round(data.total_out || 0);
     const delta = Math.round(data.delta || 0);
+    const walletBalanceFromTx = Math.round(data.wallet_balance_from_tx || 0);
     
     document.getElementById('totalIn').textContent = totalIn.toLocaleString('ru-RU');
     document.getElementById('totalOut').textContent = totalOut.toLocaleString('ru-RU');
@@ -82,6 +83,17 @@ function updateStats(data) {
         deltaElement.style.color = 'var(--success-color)';
     } else {
         deltaElement.style.color = 'var(--danger-color)';
+    }
+    
+    // Log comparison for debugging
+    if (Math.abs(delta - walletBalanceFromTx) > 0.01) {
+        console.warn('⚠️ Delta mismatch:', {
+            delta: delta,
+            walletBalanceFromTx: walletBalanceFromTx,
+            difference: Math.abs(delta - walletBalanceFromTx)
+        });
+    } else {
+        console.log('✅ Delta matches wallet balance from transactions:', delta);
     }
 }
 
@@ -175,70 +187,12 @@ function formatAmountShort(amount) {
     }
 }
 
-// Refresh charts function - reloads data from transactions and rebuilds charts
-async function refreshCharts() {
-    try {
-        // Show loading state
-        const refreshBtn = document.getElementById('refreshChartBtn');
-        const refreshTypesBtn = document.getElementById('refreshTypesChartBtn');
-        
-        if (refreshBtn) {
-            refreshBtn.disabled = true;
-            refreshBtn.textContent = '🔄 Обновление...';
-        }
-        if (refreshTypesBtn) {
-            refreshTypesBtn.disabled = true;
-            refreshTypesBtn.textContent = '🔄 Обновление...';
-        }
-        
-        // Reload both charts
-        await Promise.all([
-            loadDashboardData(),
-            loadTransactionTypesData()
-        ]);
-        
-        // Restore button state
-        if (refreshBtn) {
-            refreshBtn.disabled = false;
-            refreshBtn.textContent = '🔄 Обновить график';
-        }
-        if (refreshTypesBtn) {
-            refreshTypesBtn.disabled = false;
-            refreshTypesBtn.textContent = '🔄 Обновить график';
-        }
-        
-        // Show notification
-        if (typeof showNotification === 'function') {
-            showNotification('Графики обновлены');
-        } else {
-            console.log('Графики обновлены');
-        }
-    } catch (error) {
-        console.error('Error refreshing charts:', error);
-        if (typeof showNotification === 'function') {
-            showNotification('Ошибка при обновлении графиков', 'error');
-        }
-        
-        // Restore button state on error
-        const refreshBtn = document.getElementById('refreshChartBtn');
-        const refreshTypesBtn = document.getElementById('refreshTypesChartBtn');
-        if (refreshBtn) {
-            refreshBtn.disabled = false;
-            refreshBtn.textContent = '🔄 Обновить график';
-        }
-        if (refreshTypesBtn) {
-            refreshTypesBtn.disabled = false;
-            refreshTypesBtn.textContent = '🔄 Обновить график';
-        }
-    }
-}
-
 // Export to Excel function
 function exportToExcel() {
     const filter = document.getElementById('transactionTypeFilter');
     const periodFilter = document.getElementById('periodFilter');
     const transactionType = filter ? filter.value : '';
-    const period = periodFilter ? periodFilter.value : '365';
+    const period = periodFilter ? periodFilter.value : '0';
     
     // Build URL with parameters
     const url = `/api/dashboard/export-excel?transaction_type=${encodeURIComponent(transactionType)}&period=${encodeURIComponent(period)}`;

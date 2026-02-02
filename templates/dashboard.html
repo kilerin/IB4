@@ -30,10 +30,11 @@
             <div class="dashboard-controls">
                 <label for="periodFilter" class="form-label" style="margin-right: 10px;">Period:</label>
                 <select id="periodFilter" class="form-input" style="width: 150px; padding: 6px 10px; margin-right: 20px;">
+                    <option value="0" selected>All time</option>
                     <option value="30">Last Month</option>
                     <option value="90">Last 3 Months</option>
                     <option value="180">Last 6 Months</option>
-                    <option value="365" selected>Last Year</option>
+                    <option value="365">Last Year</option>
                 </select>
                 <label for="transactionTypeFilter" class="form-label" style="margin-right: 10px;">Transaction Type:</label>
                 <select id="transactionTypeFilter" class="form-input" style="width: 200px; padding: 6px 10px; margin-right: 20px;">
@@ -47,9 +48,6 @@
                     <option value="Transit">Transit</option>
                     <option value="" selected>All Types</option>
                 </select>
-                <button id="refreshChartBtn" class="btn btn-secondary" style="padding: 6px 15px; margin-left: 10px;" onclick="refreshCharts()">
-                    🔄 Обновить график
-                </button>
                 <button id="exportExcelBtn" class="btn btn-primary" style="padding: 6px 15px; margin-left: 10px;">
                     📥 Выгрузить в Excel
                 </button>
@@ -75,13 +73,10 @@
                     <option value="365" selected>Last Year</option>
                 </select>
                 <label for="directionFilter" class="form-label" style="margin-right: 10px;">Direction:</label>
-                <select id="directionFilter" class="form-input" style="width: 150px; padding: 6px 10px; margin-right: 20px;">
+                <select id="directionFilter" class="form-input" style="width: 150px; padding: 6px 10px;">
                     <option value="incoming" selected>Incoming</option>
                     <option value="outgoing">Outgoing</option>
                 </select>
-                <button id="refreshTypesChartBtn" class="btn btn-secondary" style="padding: 6px 15px; margin-left: 10px;" onclick="refreshCharts()">
-                    🔄 Обновить график
-                </button>
             </div>
         </div>
     </div>
