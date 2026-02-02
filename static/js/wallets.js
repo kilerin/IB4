@@ -783,6 +783,37 @@ async function refreshTransactions() {
     }
 }
 
+// Remove duplicate transactions
+async function removeDuplicateTransactions() {
+    if (!confirm('Вы уверены, что хотите удалить дубликаты транзакций? Это действие нельзя отменить.')) {
+        return;
+    }
+    
+    try {
+        showNotification('Поиск и удаление дубликатов...');
+        const response = await fetch('/api/transactions/remove-duplicates', {
+            method: 'POST'
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            if (data.deleted_count > 0) {
+                showNotification(`Удалено ${data.deleted_count} дубликатов из ${data.duplicate_groups} групп`);
+                // Reload transactions to show updated list
+                await loadTransactions();
+            } else {
+                showNotification('Дубликаты не найдены');
+            }
+        } else {
+            const error = await response.json();
+            showNotification('Ошибка при удалении дубликатов: ' + (error.error || 'Unknown error'));
+        }
+    } catch (error) {
+        console.error('Error removing duplicates:', error);
+        showNotification('Ошибка при удалении дубликатов');
+    }
+}
+
 // Utility functions
 function formatNumber(num) {
     return num.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });

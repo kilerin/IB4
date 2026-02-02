@@ -2629,6 +2629,71 @@ def delete_incoming_payment(payment_id):
     
     return jsonify({'success': True})
 
+@app.route('/api/transactions/remove-duplicates', methods=['POST'])
+def remove_duplicate_transactions():
+    """Remove duplicate transactions based on (tx_hash, wallet_id) combination"""
+    from collections import defaultdict
+    
+    try:
+        # Find duplicates by (tx_hash, wallet_id) combination
+        duplicates = defaultdict(list)
+        
+        all_transactions = Transaction.query.filter(
+            Transaction.tx_hash.isnot(None),
+            Transaction.tx_hash != ''
+        ).all()
+        
+        # Group by (tx_hash, wallet_id)
+        for tx in all_transactions:
+            key = (tx.tx_hash, tx.wallet_id)
+            duplicates[key].append(tx)
+        
+        # Find duplicate groups (where more than one transaction with same key)
+        duplicate_groups = {k: v for k, v in duplicates.items() if len(v) > 1}
+        
+        total_deleted = 0
+        deleted_details = []
+        
+        for (tx_hash, wallet_id), transactions in duplicate_groups.items():
+            # Sort by id (oldest first)
+            transactions.sort(key=lambda x: x.id)
+            
+            # Keep the first (oldest), delete the rest
+            to_delete = transactions[1:]
+            
+            for tx in to_delete:
+                deleted_details.append({
+                    'id': tx.id,
+                    'tx_hash': tx_hash[:20] + '...' if len(tx_hash) > 20 else tx_hash,
+                    'amount': float(tx.amount),
+                    'currency': tx.currency,
+                    'wallet_id': wallet_id
+                })
+                db.session.delete(tx)
+                total_deleted += 1
+        
+        if total_deleted > 0:
+            db.session.commit()
+            return jsonify({
+                'success': True,
+                'deleted_count': total_deleted,
+                'duplicate_groups': len(duplicate_groups),
+                'details': deleted_details[:10]  # Return first 10 for display
+            })
+        else:
+            return jsonify({
+                'success': True,
+                'deleted_count': 0,
+                'duplicate_groups': 0,
+                'message': 'No duplicates found'
+            })
+    except Exception as e:
+        print(f"Error removing duplicates: {e}")
+        import traceback
+        traceback.print_exc()
+        db.session.rollback()
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
+
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
