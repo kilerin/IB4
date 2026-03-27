@@ -2,7 +2,7 @@ from flask import Flask, render_template, jsonify, request, send_file, session, 
 from functools import wraps
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import func, case
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time as dt_time
 import os
 import requests
 import threading
@@ -2540,8 +2540,7 @@ def get_channel_payments(channel_id):
         if payment.date:
             payment_date = payment.date
             # Create datetime from date for sorting (use start of day)
-            from datetime import datetime, time
-            payment_sort_datetime = datetime.combine(payment_date, time.min)
+            payment_sort_datetime = datetime.combine(payment_date, dt_time.min)
         else:
             payment_date = payment.created_at.date()
             payment_sort_datetime = payment.created_at
