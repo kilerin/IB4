@@ -2,11 +2,8 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Установка системных зависимостей
-RUN apt-get update && apt-get install -y \
-    gcc \
-    postgresql-client \
-    && rm -rf /var/lib/apt/lists/*
+# psycopg2-binary ставится из wheel — gcc и postgresql-client не нужны
+# (раньше apt тянул ~70+ MB и часто падал при нехватке места на диске)
 
 # Копирование requirements и установка зависимостей
 COPY requirements.txt .
@@ -27,4 +24,3 @@ EXPOSE 5001
 
 # Запуск через Gunicorn
 CMD ["gunicorn", "--bind", "0.0.0.0:5001", "--workers", "3", "--timeout", "120", "--access-logfile", "-", "--error-logfile", "-", "app:app"]
-
