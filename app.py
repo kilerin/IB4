@@ -30,6 +30,12 @@ if database_url:
 else:
     # Для локальной разработки используем SQLite
     app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///crypto_deck.db'
+    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+        'connect_args': {
+            'timeout': 30,
+            'check_same_thread': False
+        }
+    }
 
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 # Secret key для сессий (используется для шифрования cookie)
@@ -1495,6 +1501,26 @@ def get_counterparty_name(address):
     print(f"Available addresses in address book: {all_addresses[:5]}...")  # Show first 5
     return None
 
+def commit_refresh_batch(batch_name, errors):
+    """Commit a refresh batch and recover the SQLAlchemy session on failure."""
+    try:
+        db.session.commit()
+        return True
+    except Exception as e:
+        db.session.rollback()
+        message = f"Error saving transactions for {batch_name}: {str(e)}"
+        print(message)
+        errors.append(message)
+        return False
+
+def should_import_trc20_transaction(tx_data):
+    """Import only actual TRC20 transfers; approvals are allowances, not movements."""
+    return tx_data.get('type', 'Transfer') == 'Transfer'
+
+def is_approve_contract_call(contract_value):
+    """Detect TRC20 approve(address,uint256), which is not a fund movement."""
+    return (contract_value.get('data') or '').startswith('095ea7b3')
+
 @app.route('/api/transactions/refresh', methods=['POST'])
 def refresh_transactions():
     TRONGRID_API_KEY = 'edccd59a-8c06-40a5-b5eb-41cc161009c5'
@@ -1527,6 +1553,7 @@ def refresh_transactions():
     for wallet in wallets:
         try:
             address = wallet.address
+            wallet_new_count = 0
             print(f"\n=== Getting transactions for {wallet.name} ({address}) ===")
             
             # Check for duplicates by (tx_hash, wallet_id) combination
@@ -1549,6 +1576,9 @@ def refresh_transactions():
                     trc20_data = trc20_response.json()
                     if trc20_data.get('data'):
                         for tx_data in trc20_data['data']:
+                            if not should_import_trc20_transaction(tx_data):
+                                print(f"Skipping TRC20 {tx_data.get('type')} transaction: {tx_data.get('transaction_id', '')[:16]}...")
+                                continue
                             tx_hash = tx_data.get('transaction_id')
                             # Check if this transaction already exists for this wallet
                             tx_key = (tx_hash, wallet.id)
@@ -1578,48 +1608,40 @@ def refresh_transactions():
                                 is_approve = False
                                 approve_amount = 0.0
                                 
-                                # Always check transaction details for TRC20 to determine if it's approve
-                                try:
-                                    tx_detail_response = requests.get(
-                                        f'{TRONGRID_API_URL}/wallet/gettransactionbyid',
-                                        headers=headers,
-                                        params={'value': tx_hash},
-                                        timeout=5
-                                    )
-                                    if tx_detail_response.status_code == 200:
-                                        tx_detail = tx_detail_response.json()
-                                        # Check if transaction contains contract calls
-                                        raw_data = tx_detail.get('raw_data', {})
-                                        contracts = raw_data.get('contract', [])
-                                        for contract in contracts:
-                                            contract_type = contract.get('type')
-                                            if contract_type == 'TriggerSmartContract':
-                                                parameter = contract.get('parameter', {})
-                                                value = parameter.get('value', {})
-                                                data = value.get('data', '')
-                                                # Approve method signature: approve(address,uint256) = 0x095ea7b3
-                                                # Check if data starts with approve signature
-                                                if data and data.startswith('095ea7b3'):
-                                                    is_approve = True
-                                                    # Extract approve amount from data
-                                                    # Format: 095ea7b3 (method, 8 chars) + address (64 chars padded) + amount (64 chars)
-                                                    # Total: 8 + 64 + 64 = 136 chars minimum
-                                                    if len(data) >= 136:
-                                                        try:
-                                                            # Extract amount part (last 64 hex chars after method and address)
-                                                            approve_amount_hex = data[72:136]  # Skip method (8) + address (64) = 72, take next 64
-                                                            approve_amount_int = int(approve_amount_hex, 16)
-                                                            approve_amount = round(approve_amount_int / 1_000_000, 6)
-                                                            print(f"Extracted approve amount: {approve_amount} USDT from hex: {approve_amount_hex}")
-                                                        except (ValueError, IndexError) as e:
-                                                            print(f"Error extracting approve amount: {e}")
-                                                            approve_amount = 0.0
-                                                    break
-                                except Exception as e:
-                                    print(f"Error checking approve transaction: {e}")
-                                    # If we can't get details, use heuristics
-                                    # If amount is 0 and outgoing to different address, might be approve
-                                    if amount == 0.0 and direction == 'outgoing' and to_addr and to_addr.lower() != address.lower():
+                                # Only zero-value outgoing USDT entries need the expensive approve check.
+                                if amount == 0.0 and direction == 'outgoing' and to_addr and to_addr.lower() != address.lower():
+                                    try:
+                                        tx_detail_response = requests.get(
+                                            f'{TRONGRID_API_URL}/wallet/gettransactionbyid',
+                                            headers=headers,
+                                            params={'value': tx_hash},
+                                            timeout=3
+                                        )
+                                        if tx_detail_response.status_code == 200:
+                                            tx_detail = tx_detail_response.json()
+                                            raw_data = tx_detail.get('raw_data', {})
+                                            contracts = raw_data.get('contract', [])
+                                            for contract in contracts:
+                                                contract_type = contract.get('type')
+                                                if contract_type == 'TriggerSmartContract':
+                                                    parameter = contract.get('parameter', {})
+                                                    value = parameter.get('value', {})
+                                                    data = value.get('data', '')
+                                                    # Approve method signature: approve(address,uint256) = 0x095ea7b3
+                                                    if data and data.startswith('095ea7b3'):
+                                                        is_approve = True
+                                                        if len(data) >= 136:
+                                                            try:
+                                                                approve_amount_hex = data[72:136]
+                                                                approve_amount_int = int(approve_amount_hex, 16)
+                                                                approve_amount = round(approve_amount_int / 1_000_000, 6)
+                                                                print(f"Extracted approve amount: {approve_amount} USDT from hex: {approve_amount_hex}")
+                                                            except (ValueError, IndexError) as e:
+                                                                print(f"Error extracting approve amount: {e}")
+                                                                approve_amount = 0.0
+                                                        break
+                                    except Exception as e:
+                                        print(f"Error checking approve transaction: {e}")
                                         is_approve = True
                                 
                                 # Get timestamp
@@ -1641,7 +1663,8 @@ def refresh_transactions():
                                 # For outgoing: counterparty is to_address (who received)
                                 counterparty_address = from_addr if direction == 'incoming' else to_addr
                                 if counterparty_address:
-                                    counterparty_name = get_counterparty_name(counterparty_address)
+                                    with db.session.no_autoflush:
+                                        counterparty_name = get_counterparty_name(counterparty_address)
                                     if counterparty_name:
                                         print(f"Found counterparty: {counterparty_name} for address: {counterparty_address}")
                                 else:
@@ -1686,6 +1709,7 @@ def refresh_transactions():
                                 # Add to set to prevent duplicates
                                 all_existing_tx_keys.add(tx_key)
                                 new_count += 1
+                                wallet_new_count += 1
                                 print(f"Added USDT transaction: {tx_hash[:16]}... {amount} USDT ({direction})")
             except Exception as e:
                 print(f"Error fetching TRC20 transactions for {wallet.name}: {str(e)}")
@@ -1800,6 +1824,7 @@ def refresh_transactions():
                                         # Add to set to prevent duplicates
                                         all_existing_tx_keys.add(tx_key)
                                         new_count += 1
+                                        wallet_new_count += 1
                                         print(f"Added TRX transaction: {tx_hash[:16]}... {amount} TRX ({direction}, {transaction_type})")
                                         transaction_processed = True
                                         break
@@ -1835,6 +1860,7 @@ def refresh_transactions():
                                         # Add to set to prevent duplicates
                                         all_existing_tx_keys.add(tx_key)
                                         new_count += 1
+                                        wallet_new_count += 1
                                         print(f"Added TRX transaction: {tx_hash[:16]}... {amount} TRX (freeze)")
                                         transaction_processed = True
                                         break
@@ -1869,6 +1895,7 @@ def refresh_transactions():
                                         # Add to set to prevent duplicates
                                         all_existing_tx_keys.add(tx_key)
                                         new_count += 1
+                                        wallet_new_count += 1
                                         print(f"Added TRX transaction: {tx_hash[:16]}... (unfreeze)")
                                         transaction_processed = True
                                         break
@@ -1902,6 +1929,7 @@ def refresh_transactions():
                                         # Add to set to prevent duplicates
                                         all_existing_tx_keys.add(tx_key)
                                         new_count += 1
+                                        wallet_new_count += 1
                                         print(f"Added TRX transaction: {tx_hash[:16]}... (vote)")
                                         transaction_processed = True
                                         break
@@ -1935,11 +1963,17 @@ def refresh_transactions():
                                         # Add to set to prevent duplicates
                                         all_existing_tx_keys.add(tx_key)
                                         new_count += 1
+                                        wallet_new_count += 1
                                         print(f"Added TRX transaction: {tx_hash[:16]}... (withdraw)")
                                         transaction_processed = True
                                         break
                                     
                                     elif contract_type in ['TriggerSmartContract', 'CreateSmartContract']:
+                                        if is_approve_contract_call(value):
+                                            print(f"Skipping approve contract transaction: {tx_hash[:16]}...")
+                                            transaction_processed = True
+                                            break
+
                                         transaction_type = 'contract_execution'
                                         owner_address = value.get('owner_address', '')
                                         
@@ -1968,6 +2002,7 @@ def refresh_transactions():
                                         # Add to set to prevent duplicates
                                         all_existing_tx_keys.add(tx_key)
                                         new_count += 1
+                                        wallet_new_count += 1
                                         print(f"Added TRX transaction: {tx_hash[:16]}... (contract_execution)")
                                         transaction_processed = True
                                         break
@@ -1978,8 +2013,13 @@ def refresh_transactions():
             except Exception as e:
                 print(f"Error fetching TRX transactions for {wallet.name}: {str(e)}")
                 errors.append(f"Error fetching TRX transactions for {wallet.name}: {str(e)}")
+            
+            if wallet_new_count > 0:
+                if not commit_refresh_batch(wallet.name, errors):
+                    new_count -= wallet_new_count
                 
         except Exception as e:
+            db.session.rollback()
             print(f"Error processing wallet {wallet.name}: {str(e)}")
             errors.append(f"Error processing {wallet.name}: {str(e)}")
             continue
@@ -1999,7 +2039,8 @@ def refresh_transactions():
         if counterparty_address:
             # Normalize address for comparison
             counterparty_address_clean = counterparty_address.strip().lower()
-            counterparty_name = get_counterparty_name(counterparty_address)
+            with db.session.no_autoflush:
+                counterparty_name = get_counterparty_name(counterparty_address)
             if counterparty_name:
                 # Only update if counterparty_name is different (avoid duplicates)
                 if tx.counterparty_name != counterparty_name:
@@ -2033,7 +2074,7 @@ def refresh_transactions():
     if own_fund_updated_count > 0:
         print(f"Updated {own_fund_updated_count} transactions with 'Own fund transfer' status")
     
-    db.session.commit()
+    commit_refresh_batch("transaction metadata", errors)
     
     print(f"\n=== TRANSACTIONS REFRESH COMPLETE ===")
     print(f"Added {new_count} new transactions")
