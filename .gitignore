@@ -33,6 +33,8 @@ instance/
 .env
 .env.local
 .env.server
+.env.backup
+.vercel/
 
 # Archives
 *.tar.gz
