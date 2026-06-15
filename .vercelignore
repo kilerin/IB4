@@ -1,0 +1,16 @@
+.git
+.vercel
+venv
+env
+.venv
+instance
+backups
+backup_*
+.env
+.env.*
+.env.backup
+*.db
+*.sqlite
+*.sqlite3
+__pycache__
+*.pyc

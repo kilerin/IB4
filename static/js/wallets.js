@@ -901,8 +901,7 @@ async function openWalletDetails(walletId) {
         document.getElementById('walletDetailsTitle').textContent = wallet.name;
         document.getElementById('walletDetailsName').value = wallet.name;
         document.getElementById('walletDetailsAddress').textContent = wallet.address;
-        
-        // Цвет больше не используется - все кошельки одинакового цвета
+        setWalletDetailsColor(wallet.color || 'gray');
         
         // Load wallet transactions
         await loadWalletTransactions(walletId);
@@ -976,7 +975,8 @@ async function saveWalletChanges() {
     if (!currentWalletId) return;
     
     const newName = document.getElementById('walletDetailsName').value.trim();
-    const color = 'gray'; // Все кошельки одинакового цвета
+    const selectedColor = document.querySelector('input[name="walletDetailsColor"]:checked');
+    const color = selectedColor ? selectedColor.value : 'gray';
     
     if (!newName) {
         alert('Wallet name cannot be empty');
@@ -1000,6 +1000,16 @@ async function saveWalletChanges() {
     } catch (error) {
         console.error('Error saving wallet changes:', error);
         alert('Error saving wallet changes');
+    }
+}
+
+function setWalletDetailsColor(color) {
+    const validColors = ['red', 'blue', 'purple', 'gray', 'green', 'orange', 'yellow'];
+    const normalizedColor = validColors.includes(color) ? color : 'gray';
+    const colorInput = document.querySelector(`input[name="walletDetailsColor"][value="${normalizedColor}"]`);
+
+    if (colorInput) {
+        colorInput.checked = true;
     }
 }
 
