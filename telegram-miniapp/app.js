@@ -245,15 +245,15 @@ function walletCard(wallet) {
     <article class="wallet-card" style="--wallet-color:${color}">
       <header>
         <button class="wallet-title-btn" data-wallet="${wallet.id}" type="button">${escapeHtml(wallet.name)}</button>
-        <span class="wallet-usdt">${money(wallet.balance_usdt)} USDT</span>
+        <span class="wallet-usdt">${money(wallet.balance_usdt)}</span>
       </header>
-      <div class="wallet-trx">${money(wallet.balance_trx)} TRX</div>
-      <button class="wallet-address" data-copy-address="${escapeHtmlAttr(wallet.address || '')}" type="button">
-        ${escapeHtml(wallet.address || '-')}
-      </button>
-      <div class="toolbar">
-        ${hidden}
+      <div class="wallet-subrow">
+        <button class="wallet-address" data-copy-address="${escapeHtmlAttr(wallet.address || '')}" type="button">
+          ${escapeHtml(wallet.address || '-')}
+        </button>
+        <span class="wallet-trx">${money(wallet.balance_trx)}</span>
       </div>
+      ${hidden ? `<div class="toolbar wallet-badges">${hidden}</div>` : ''}
     </article>
   `;
 }

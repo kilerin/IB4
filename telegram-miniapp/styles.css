@@ -164,7 +164,7 @@ h1 {
 
 .wallet-card {
   border-left: 5px solid var(--wallet-color, #68707f);
-  padding: 14px;
+  padding: 11px 12px;
 }
 
 .wallet-card header,
@@ -195,29 +195,42 @@ h1 {
 .wallet-title-btn {
   font-size: 16px;
   font-weight: 750;
+  line-height: 1.2;
 }
 
 .wallet-usdt {
+  color: var(--good);
   font-size: 15px;
   font-weight: 800;
   white-space: nowrap;
 }
 
+.wallet-subrow {
+  align-items: flex-start;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  margin-top: 5px;
+}
+
 .wallet-trx {
-  color: var(--muted);
+  color: var(--danger);
   font-size: 13px;
-  margin-top: 4px;
   text-align: right;
+  white-space: nowrap;
 }
 
 .wallet-address {
   color: var(--muted);
-  display: block;
+  flex: 1;
   font-size: 12px;
   line-height: 1.35;
-  margin-top: 10px;
   overflow-wrap: anywhere;
-  width: 100%;
+}
+
+.wallet-badges {
+  margin-bottom: 0;
+  margin-top: 8px;
 }
 
 .address,
