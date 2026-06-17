@@ -36,20 +36,20 @@ function displayAmlChecks(checks) {
         const timeStr = date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
         
         const riskLevel = check.risk_level ? check.risk_level.toUpperCase() : 'N/A';
-        const riskLevelClass = `risk-level-${(check.risk_level || 'undefined').toLowerCase()}`;
+        const riskLevelClass = `risk-level-${sanitizeClassSuffix(check.risk_level || 'undefined')}`;
         
         const balanceUsdt = check.balance_usdt !== null && check.balance_usdt !== undefined ? formatAmount(check.balance_usdt) : '-';
         const balanceTrx = check.balance_trx !== null && check.balance_trx !== undefined ? formatAmount(check.balance_trx) : '-';
         
         row.innerHTML = `
-            <td><span class="risk-level ${riskLevelClass}">${riskLevel}</span></td>
+            <td><span class="risk-level ${riskLevelClass}">${escapeHtml(riskLevel)}</span></td>
             <td>${check.risk_score !== null ? check.risk_score.toFixed(1) + '%' : 'N/A'}</td>
-            <td><span class="address-short">${shortenAddress(check.address)}</span></td>
-            <td>${check.customer || '-'}</td>
+            <td><span class="address-short">${escapeHtml(shortenAddress(check.address))}</span></td>
+            <td>${escapeHtml(check.customer || '-')}</td>
             <td>${balanceUsdt}</td>
             <td>${balanceTrx}</td>
             <td>${dateStr} ${timeStr}</td>
-            <td>${check.manager || 'N4'}</td>
+            <td>${escapeHtml(check.manager || 'N4')}</td>
         `;
         
         tbody.appendChild(row);
@@ -67,7 +67,7 @@ function displayAmlChecks(checks) {
             const timeStr = date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
             
             const riskLevel = completedCheck.risk_level ? completedCheck.risk_level.toUpperCase() : 'N/A';
-            const riskLevelClass = `risk-level-${(completedCheck.risk_level || 'undefined').toLowerCase()}`;
+            const riskLevelClass = `risk-level-${sanitizeClassSuffix(completedCheck.risk_level || 'undefined')}`;
             
             checkingRow.id = '';
             checkingRow.dataset.address = '';
@@ -75,14 +75,14 @@ function displayAmlChecks(checks) {
             const balanceTrx = completedCheck.balance_trx !== null && completedCheck.balance_trx !== undefined ? formatAmount(completedCheck.balance_trx) : '-';
             
             checkingRow.innerHTML = `
-                <td><span class="risk-level ${riskLevelClass}">${riskLevel}</span></td>
+                <td><span class="risk-level ${riskLevelClass}">${escapeHtml(riskLevel)}</span></td>
                 <td>${completedCheck.risk_score !== null ? completedCheck.risk_score.toFixed(1) + '%' : 'N/A'}</td>
-                <td><span class="address-short">${shortenAddress(completedCheck.address)}</span></td>
-                <td>${completedCheck.customer || '-'}</td>
+                <td><span class="address-short">${escapeHtml(shortenAddress(completedCheck.address))}</span></td>
+                <td>${escapeHtml(completedCheck.customer || '-')}</td>
                 <td>${balanceUsdt}</td>
                 <td>${balanceTrx}</td>
                 <td>${dateStr} ${timeStr}</td>
-                <td>${completedCheck.manager || 'N4'}</td>
+                <td>${escapeHtml(completedCheck.manager || 'N4')}</td>
             `;
         }
     });
@@ -208,6 +208,16 @@ function formatAmount(amount) {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2
     });
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text == null ? '' : String(text);
+    return div.innerHTML;
+}
+
+function sanitizeClassSuffix(text) {
+    return String(text).toLowerCase().replace(/[^a-z0-9_-]/g, '');
 }
 
 function showNotification(message) {

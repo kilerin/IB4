@@ -28,11 +28,15 @@ nano .env
 ```env
 SECRET_KEY=ваш-секретный-ключ-для-сессий
 APP_PASSWORD=ваш-пароль-для-входа
+TRONGRID_API_KEY=ваш-trongrid-api-key
+BITOK_API_KEY_ID=ваш-bitok-api-key-id
+BITOK_API_SECRET=ваш-bitok-api-secret
 ```
 
 **Важно:**
 - `SECRET_KEY` - случайная строка для шифрования сессий (можно сгенерировать: `python3 -c "import secrets; print(secrets.token_hex(32))"`)
-- `APP_PASSWORD` - пароль для входа в приложение (по умолчанию: `admin123`, но лучше изменить!)
+- `APP_PASSWORD` - надежный пароль для входа в приложение
+- `TRONGRID_API_KEY`, `BITOK_API_KEY_ID`, `BITOK_API_SECRET` обязательны для обновления балансов, транзакций и AML проверок
 
 ### 5. Пересоберите и перезапустите контейнеры
 ```bash

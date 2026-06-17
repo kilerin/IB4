@@ -1,0 +1,39 @@
+services:
+  telegram-api:
+    build: .
+    container_name: ib4deck_telegram_api
+    command: >
+      gunicorn --bind 0.0.0.0:5002 --workers ${TELEGRAM_API_WORKERS:-3}
+      --timeout ${TELEGRAM_API_TIMEOUT:-180}
+      --access-logfile - --error-logfile - telegram_wsgi:app
+    environment:
+      - DATABASE_URL=${DATABASE_URL:?DATABASE_URL is required}
+      - SECRET_KEY=${SECRET_KEY:?SECRET_KEY is required}
+      - APP_PASSWORD=${APP_PASSWORD:?APP_PASSWORD is required}
+      - TRONGRID_API_KEY=${TRONGRID_API_KEY:?TRONGRID_API_KEY is required}
+      - BITOK_API_KEY_ID=${BITOK_API_KEY_ID:?BITOK_API_KEY_ID is required}
+      - BITOK_API_SECRET=${BITOK_API_SECRET:?BITOK_API_SECRET is required}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:?TELEGRAM_BOT_TOKEN is required}
+      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required}
+      - ALLOWED_TELEGRAM_IDS=${ALLOWED_TELEGRAM_IDS:?ALLOWED_TELEGRAM_IDS is required}
+    restart: unless-stopped
+    networks:
+      - ib4deck_telegram
+
+  telegram-nginx:
+    image: nginx:alpine
+    container_name: ib4deck_telegram_nginx
+    ports:
+      - "8080:80"
+    volumes:
+      - ./deploy/vps/nginx.telegram-miniapp.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./telegram-miniapp:/usr/share/nginx/html:ro
+    depends_on:
+      - telegram-api
+    restart: unless-stopped
+    networks:
+      - ib4deck_telegram
+
+networks:
+  ib4deck_telegram:
+    driver: bridge

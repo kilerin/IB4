@@ -15,11 +15,6 @@
             </div>
             <ul class="nav-menu">
                 <li>
-                    <a href="{{ url_for('dashboard') }}" class="nav-icon {% if request.endpoint == 'dashboard' %}active{% endif %}" title="Dashboard">
-                        <img src="/static/ico/presentation.svg" alt="Dashboard">
-                    </a>
-                </li>
-                <li>
                     <a href="{{ url_for('wallets') }}" class="nav-icon {% if request.endpoint == 'wallets' %}active{% endif %}" title="Wallets">
                         <img src="/static/ico/wallet-money.svg" alt="Wallets">
                     </a>
@@ -32,11 +27,6 @@
                 <li>
                     <a href="{{ url_for('aml_check') }}" class="nav-icon {% if request.endpoint == 'aml_check' %}active{% endif %}" title="AML Check">
                         <img src="/static/ico/shield-up.svg" alt="AML Check">
-                    </a>
-                </li>
-                <li>
-                    <a href="{{ url_for('transit_payments') }}" class="nav-icon {% if request.endpoint == 'transit_payments' %}active{% endif %}" title="Transit Payments">
-                        <img src="/static/ico/round-sort.svg" alt="Transit Payments">
                     </a>
                 </li>
             </ul>
@@ -52,6 +42,20 @@
             {% block content %}{% endblock %}
         </main>
     </div>
+    <script>
+        window.fetch = ((nativeFetch) => (input, init = {}) => {
+            const method = (init.method || 'GET').toUpperCase();
+            const url = typeof input === 'string' ? input : input.url;
+            const isSameOrigin = !/^https?:\/\//i.test(url) || url.startsWith(window.location.origin);
+            if (isSameOrigin && ['POST', 'PUT', 'DELETE', 'PATCH'].includes(method)) {
+                init.headers = {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    ...(init.headers || {})
+                };
+            }
+            return nativeFetch(input, init);
+        })(window.fetch);
+    </script>
     {% block scripts %}{% endblock %}
 </body>
 </html>

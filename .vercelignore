@@ -14,3 +14,6 @@ backup_*
 *.sqlite3
 __pycache__
 *.pyc
+telegram-miniapp
+docker-compose.telegram.yml
+deploy/vps

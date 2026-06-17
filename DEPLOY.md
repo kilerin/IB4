@@ -55,7 +55,10 @@ nano .env
 **Важно:** Измените пароли в `.env` файле:
 - `POSTGRES_PASSWORD` - надежный пароль для PostgreSQL
 - `SECRET_KEY` - случайная строка для Flask (можно сгенерировать: `python -c "import secrets; print(secrets.token_hex(32))"`)
-- `APP_PASSWORD` - пароль для входа в приложение (по умолчанию: `admin123`)
+- `APP_PASSWORD` - надежный пароль для входа в приложение
+- `TRONGRID_API_KEY` - API ключ TronGrid для балансов и транзакций
+- `BITOK_API_KEY_ID` - ID ключа BitOK KYT API
+- `BITOK_API_SECRET` - секрет BitOK KYT API
 
 Пример `.env` файла:
 ```env
@@ -64,6 +67,9 @@ POSTGRES_USER=crypto_user
 POSTGRES_PASSWORD=your_secure_db_password
 SECRET_KEY=your_secret_key_here
 APP_PASSWORD=your_app_password_here
+TRONGRID_API_KEY=your_trongrid_api_key
+BITOK_API_KEY_ID=your_bitok_api_key_id
+BITOK_API_SECRET=your_bitok_api_secret
 ```
 
 ### 4. Запуск приложения

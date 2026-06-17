@@ -1,16 +1,21 @@
-from flask import Flask, render_template, jsonify, request, send_file, session, redirect, url_for
+from flask import Flask, render_template, jsonify, request, session, redirect, url_for
 from functools import wraps
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import func, case
-from datetime import datetime, timedelta, time as dt_time
+from sqlalchemy import func
+from datetime import datetime, timedelta
+from ib4deck.auth.telegram import (
+    AuthError,
+    issue_jwt,
+    parse_allowed_telegram_ids,
+    validate_init_data,
+    verify_jwt,
+)
+import hmac
 import os
 import requests
 import threading
 import time
 from dotenv import load_dotenv
-from openpyxl import Workbook
-from openpyxl.styles import Font, Alignment
-from io import BytesIO
 
 load_dotenv()  # Загружает переменные из .env файла
 
@@ -39,11 +44,55 @@ else:
 
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 # Secret key для сессий (используется для шифрования cookie)
-app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key-change-in-production')
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY') or 'dev-secret-key-change-in-production'
 # Пароль для входа (из переменной окружения)
-APP_PASSWORD = os.getenv('APP_PASSWORD', 'admin123')
+APP_PASSWORD = os.getenv('APP_PASSWORD') or 'admin123'
+if database_url and app.config['SECRET_KEY'] == 'dev-secret-key-change-in-production':
+    raise RuntimeError('SECRET_KEY must be configured in production')
+if database_url and APP_PASSWORD == 'admin123':
+    raise RuntimeError('APP_PASSWORD must be configured in production')
+
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Strict'
+app.config['SESSION_COOKIE_SECURE'] = bool(database_url)
+
+TRONGRID_API_URL = os.getenv('TRONGRID_API_URL', 'https://api.trongrid.io')
+USDT_TRC20_CONTRACT = os.getenv('USDT_TRC20_CONTRACT', 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t')
+BITOK_API_BASE_URL = os.getenv('BITOK_API_BASE_URL', 'https://kyt-api.bitok.org')
+TELEGRAM_AUTH_MAX_AGE_SECONDS = int(os.getenv('TELEGRAM_AUTH_MAX_AGE_SECONDS', '86400'))
+JWT_EXPIRES_SECONDS = int(os.getenv('JWT_EXPIRES_SECONDS', '86400'))
 
 db = SQLAlchemy(app)
+
+def require_env(name):
+    value = os.getenv(name)
+    if not value:
+        raise RuntimeError(f'{name} is not configured')
+    return value
+
+def get_trongrid_headers():
+    return {'TRON-PRO-API-KEY': require_env('TRONGRID_API_KEY')}
+
+def get_bitok_credentials():
+    return require_env('BITOK_API_KEY_ID'), require_env('BITOK_API_SECRET')
+
+def get_bearer_payload():
+    auth_header = request.headers.get('Authorization', '')
+    if not auth_header.startswith('Bearer '):
+        return None
+
+    token = auth_header.split(' ', 1)[1].strip()
+    if not token:
+        return None
+
+    payload = verify_jwt(token, require_env('JWT_SECRET'))
+    allowed_ids = parse_allowed_telegram_ids(require_env('ALLOWED_TELEGRAM_IDS'))
+    if int(payload.get('sub', 0)) not in allowed_ids:
+        raise AuthError('Bearer token subject is no longer allowed')
+    return payload
+
+def has_csrf_header():
+    return request.headers.get('X-Requested-With') == 'XMLHttpRequest'
 
 # Декоратор для защиты маршрутов
 def login_required(f):
@@ -58,12 +107,20 @@ def login_required(f):
 @app.before_request
 def require_login():
     # Разрешаем доступ к странице входа и статическим файлам без аутентификации
-    if request.endpoint == 'login' or request.path.startswith('/static/'):
+    if request.endpoint in {'login', 'telegram_auth', 'health'} or request.path.startswith('/static/'):
         return
     if request.path.startswith('/api/'):
-        # Для API также требуется аутентификация
-        if 'logged_in' not in session:
-            return jsonify({'error': 'Unauthorized'}), 401
+        if 'logged_in' in session:
+            if request.method in {'POST', 'PUT', 'DELETE', 'PATCH'} and not has_csrf_header():
+                return jsonify({'error': 'Forbidden'}), 403
+            return
+        try:
+            request.telegram_payload = get_bearer_payload()
+            if request.telegram_payload:
+                return
+        except (AuthError, RuntimeError) as e:
+            return jsonify({'error': 'Unauthorized', 'message': str(e)}), 401
+        return jsonify({'error': 'Unauthorized'}), 401
     elif 'logged_in' not in session:
         return redirect(url_for('login'))
 
@@ -87,8 +144,8 @@ class Wallet(db.Model):
 
 class Transaction(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    wallet_id = db.Column(db.Integer, db.ForeignKey('wallet.id', ondelete='CASCADE'), nullable=False)
-    currency = db.Column(db.String(10), nullable=False)  # USDT or TRX
+    wallet_id = db.Column(db.Integer, db.ForeignKey('wallet.id', ondelete='CASCADE'), nullable=False, index=True)
+    currency = db.Column(db.String(10), nullable=False, index=True)  # USDT or TRX
     amount = db.Column(db.Float, nullable=False)
     direction = db.Column(db.String(10), nullable=False)  # incoming or outgoing
     type = db.Column(db.String(50), default='transfer')  # transfer, freeze, unfreeze, vote, unvote, deposit, withdraw, exchange, contract_execution
@@ -96,10 +153,10 @@ class Transaction(db.Model):
     to_address = db.Column(db.String(200), nullable=True)
     counterparty_name = db.Column(db.String(100), nullable=True)
     aml_status = db.Column(db.String(50), default='pending')
-    tx_hash = db.Column(db.String(200), nullable=True)
+    tx_hash = db.Column(db.String(200), nullable=True, index=True)
     comment = db.Column(db.String(500), nullable=True)  # User comment for transaction
-    transaction_type = db.Column(db.String(50), nullable=True)  # Sell usdt, Buy usdt, Alex, Agent, Loan, Expence, Other, Transit
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    transaction_type = db.Column(db.String(50), nullable=True, index=True)  # Sell usdt, Buy usdt, Alex, Agent, Loan, Expence, Other, Transit
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
     
     wallet = db.relationship('Wallet', backref=db.backref('transactions', lazy=True, cascade='all, delete-orphan'))
 
@@ -113,7 +170,7 @@ class Reserve(db.Model):
 class AddressBook(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     customer = db.Column(db.String(200), nullable=False)
-    address = db.Column(db.String(200), nullable=False)
+    address = db.Column(db.String(200), nullable=False, index=True)
     aml_status = db.Column(db.String(50), default='pending')
     manager = db.Column(db.String(100), nullable=True)
     date_added = db.Column(db.DateTime, default=datetime.utcnow)
@@ -132,35 +189,14 @@ class AmlCheck(db.Model):
     checked_at = db.Column(db.DateTime, default=datetime.utcnow)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-class Channel(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(200), nullable=False)
-    transaction_type = db.Column(db.String(50), nullable=False)  # Sell usdt, Buy usdt, Alex, Agent, Loan, Expence, Other, Transit
-    agent_balance = db.Column(db.Float, nullable=False, default=0.0)
-    not_paid_orders = db.Column(db.Integer, nullable=False, default=0)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-class IncomingPayment(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    channel_id = db.Column(db.Integer, db.ForeignKey('channel.id', ondelete='CASCADE'), nullable=False)
-    sum_amount = db.Column(db.Float, nullable=False)  # SUM $
-    agent = db.Column(db.String(200), nullable=False, default='')
-    from_address = db.Column(db.String(200), nullable=False, default='')
-    date = db.Column(db.Date, nullable=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
-    channel = db.relationship('Channel', backref=db.backref('incoming_payments', lazy=True, cascade='all, delete-orphan'))
-
 # Routes
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
         password = request.form.get('password')
-        if password == APP_PASSWORD:
+        if hmac.compare_digest(password or '', APP_PASSWORD):
             session['logged_in'] = True
-            return redirect(url_for('dashboard'))
+            return redirect(url_for('wallets'))
         else:
             return render_template('login.html', error='Неверный пароль')
     return render_template('login.html')
@@ -170,10 +206,44 @@ def logout():
     session.pop('logged_in', None)
     return redirect(url_for('login'))
 
+@app.route('/health')
+def health():
+    return jsonify({'status': 'ok'})
+
+@app.route('/api/auth/telegram', methods=['POST'])
+def telegram_auth():
+    data = request.get_json(silent=True) or {}
+    init_data = data.get('initData') or data.get('init_data')
+
+    try:
+        parsed = validate_init_data(
+            init_data,
+            require_env('TELEGRAM_BOT_TOKEN'),
+            max_age_seconds=TELEGRAM_AUTH_MAX_AGE_SECONDS,
+        )
+        user = parsed.get('user') or {}
+        user_id = int(user.get('id', 0))
+        if not user_id:
+            raise AuthError('Telegram user id is missing')
+
+        allowed_ids = parse_allowed_telegram_ids(require_env('ALLOWED_TELEGRAM_IDS'))
+        if user_id not in allowed_ids:
+            return jsonify({'error': 'Forbidden'}), 403
+
+        token = issue_jwt(user, require_env('JWT_SECRET'), expires_in_seconds=JWT_EXPIRES_SECONDS)
+        return jsonify({
+            'token': token,
+            'token_type': 'Bearer',
+            'expires_in': JWT_EXPIRES_SECONDS,
+            'user': user,
+        })
+    except (AuthError, RuntimeError, ValueError):
+        return jsonify({'error': 'Unauthorized'}), 401
+
 @app.route('/')
 @login_required
-def dashboard():
-    return render_template('dashboard.html')
+def index():
+    return redirect(url_for('wallets'))
 
 @app.route('/wallets')
 @login_required
@@ -189,11 +259,6 @@ def address_book():
 @login_required
 def aml_check():
     return render_template('aml_check.html')
-
-@app.route('/transit-payments')
-@login_required
-def transit_payments():
-    return render_template('transit_payments.html')
 
 # API Routes
 @app.route('/api/wallets', methods=['GET'])
@@ -359,13 +424,10 @@ def reorder_wallets():
 @app.route('/api/wallets/refresh-balances', methods=['POST'])
 def refresh_balances():
     print("\n=== REFRESH BALANCES CALLED ===")
-    TRONGRID_API_KEY = 'edccd59a-8c06-40a5-b5eb-41cc161009c5'
-    TRONGRID_API_URL = 'https://api.trongrid.io'
-    USDT_TRC20_CONTRACT = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t'  # USDT-TRC20 contract address
-    
-    headers = {
-        'TRON-PRO-API-KEY': TRONGRID_API_KEY
-    }
+    try:
+        headers = get_trongrid_headers()
+    except RuntimeError as e:
+        return jsonify({'error': str(e)}), 500
     
     wallets = Wallet.query.all()
     print(f"Found {len(wallets)} wallets to update")
@@ -529,7 +591,7 @@ def build_bitok_signature(http_method, endpoint, timestamp, json_payload=None, a
     import json
     
     if api_secret is None:
-        api_secret = 'dO69KPVW9qOH03Of5c3To3cgmF9RClSp9xf013IG8HVPMr68WTvBUoVFtLcnKrZq'
+        api_secret = require_env('BITOK_API_SECRET')
     
     str_to_sign = f"{http_method}\n{endpoint}\n{timestamp}"
     
@@ -553,10 +615,7 @@ def perform_aml_check_async(wallet_id):
             return
         
         try:
-            # BitOK API credentials
-            API_KEY_ID = 'hvvunrOUKjEzlkMz4JiFUPPD5Je7E8qK'
-            API_SECRET = 'dO69KPVW9qOH03Of5c3To3cgmF9RClSp9xf013IG8HVPMr68WTvBUoVFtLcnKrZq'
-            API_BASE_URL = 'https://kyt-api.bitok.org'
+            api_key_id, api_secret = get_bitok_credentials()
             
             # Создаем запрос на проверку адреса
             timestamp = str(int(time.time() * 1000))
@@ -567,19 +626,19 @@ def perform_aml_check_async(wallet_id):
                 'address': wallet.address
             }
             
-            signature = build_bitok_signature('POST', endpoint, timestamp, payload, API_SECRET)
+            signature = build_bitok_signature('POST', endpoint, timestamp, payload, api_secret)
             
             headers = {
                 'Content-Type': 'application/json',
                 'Accept': 'application/json',
-                'API-KEY-ID': API_KEY_ID,
+                'API-KEY-ID': api_key_id,
                 'API-TIMESTAMP': timestamp,
                 'API-SIGNATURE': signature
             }
             
             # Отправляем запрос на проверку
             response = requests.post(
-                f'{API_BASE_URL}{endpoint}',
+                f'{BITOK_API_BASE_URL}{endpoint}',
                 headers=headers,
                 json=payload,
                 timeout=10
@@ -603,17 +662,17 @@ def perform_aml_check_async(wallet_id):
                 
                 timestamp = str(int(time.time() * 1000))
                 endpoint = f'/v1/manual-checks/{check_id}/'
-                signature = build_bitok_signature('GET', endpoint, timestamp, None, API_SECRET)
+                signature = build_bitok_signature('GET', endpoint, timestamp, None, api_secret)
                 
                 headers = {
                     'Accept': 'application/json',
-                    'API-KEY-ID': API_KEY_ID,
+                    'API-KEY-ID': api_key_id,
                     'API-TIMESTAMP': timestamp,
                     'API-SIGNATURE': signature
                 }
                 
                 status_response = requests.get(
-                    f'{API_BASE_URL}{endpoint}',
+                    f'{BITOK_API_BASE_URL}{endpoint}',
                     headers=headers,
                     timeout=10
                 )
@@ -692,10 +751,7 @@ def perform_aml_check_async(wallet_id):
 def perform_aml_check_for_address(address, manager='N4'):
     """Выполняет AML проверку для произвольного адреса"""
     try:
-        # BitOK API credentials
-        API_KEY_ID = 'hvvunrOUKjEzlkMz4JiFUPPD5Je7E8qK'
-        API_SECRET = 'dO69KPVW9qOH03Of5c3To3cgmF9RClSp9xf013IG8HVPMr68WTvBUoVFtLcnKrZq'
-        API_BASE_URL = 'https://kyt-api.bitok.org'
+        api_key_id, api_secret = get_bitok_credentials()
         
         # Создаем запрос на проверку адреса
         timestamp = str(int(time.time() * 1000))
@@ -706,19 +762,19 @@ def perform_aml_check_for_address(address, manager='N4'):
             'address': address
         }
         
-        signature = build_bitok_signature('POST', endpoint, timestamp, payload, API_SECRET)
+        signature = build_bitok_signature('POST', endpoint, timestamp, payload, api_secret)
         
         headers = {
             'Content-Type': 'application/json',
             'Accept': 'application/json',
-            'API-KEY-ID': API_KEY_ID,
+            'API-KEY-ID': api_key_id,
             'API-TIMESTAMP': timestamp,
             'API-SIGNATURE': signature
         }
         
         # Отправляем запрос на проверку
         response = requests.post(
-            f'{API_BASE_URL}{endpoint}',
+            f'{BITOK_API_BASE_URL}{endpoint}',
             headers=headers,
             json=payload,
             timeout=10
@@ -742,17 +798,17 @@ def perform_aml_check_for_address(address, manager='N4'):
             
             timestamp = str(int(time.time() * 1000))
             endpoint = f'/v1/manual-checks/{check_id}/'
-            signature = build_bitok_signature('GET', endpoint, timestamp, None, API_SECRET)
+            signature = build_bitok_signature('GET', endpoint, timestamp, None, api_secret)
             
             headers = {
                 'Accept': 'application/json',
-                'API-KEY-ID': API_KEY_ID,
+                'API-KEY-ID': api_key_id,
                 'API-TIMESTAMP': timestamp,
                 'API-SIGNATURE': signature
             }
             
             status_response = requests.get(
-                f'{API_BASE_URL}{endpoint}',
+                f'{BITOK_API_BASE_URL}{endpoint}',
                 headers=headers,
                 timeout=10
             )
@@ -791,13 +847,7 @@ def perform_aml_check_for_address(address, manager='N4'):
                     balance_usdt = 0.0
                     balance_trx = 0.0
                     try:
-                        TRONGRID_API_KEY = 'edccd59a-8c06-40a5-b5eb-41cc161009c5'
-                        TRONGRID_API_URL = 'https://api.trongrid.io'
-                        USDT_TRC20_CONTRACT = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t'
-                        
-                        headers = {
-                            'TRON-PRO-API-KEY': TRONGRID_API_KEY
-                        }
+                        headers = get_trongrid_headers()
                         
                         # Get TRX balance
                         trx_response = requests.get(
@@ -1011,430 +1061,6 @@ def reset_aml_checking(wallet_id):
             'message': 'Wallet is not in checking state'
         }), 400
 
-@app.route('/api/dashboard/weekly-stats', methods=['GET'])
-def get_weekly_stats():
-    """Get weekly statistics filtered by transaction type"""
-    from datetime import datetime, timedelta
-    from sqlalchemy import func, extract
-    
-    transaction_type = request.args.get('transaction_type', '')
-    period_days = request.args.get('period', '0')
-    
-    # Handle "All time" (period_days = 0)
-    use_all_time = False
-    try:
-        period_days = int(period_days)
-        if period_days == 0:
-            use_all_time = True
-        else:
-            # Limit period to reasonable range (1 day to 2 years)
-            period_days = max(1, min(period_days, 730))
-    except (ValueError, TypeError):
-        use_all_time = True
-    
-    # Calculate date range based on selected period (for weekly breakdown)
-    end_date = datetime.utcnow()
-    if use_all_time:
-        # For "All time", get the earliest transaction date or use a very old date
-        earliest_tx = Transaction.query.order_by(Transaction.created_at.asc()).first()
-        if earliest_tx:
-            start_date = earliest_tx.created_at.replace(hour=0, minute=0, second=0, microsecond=0)
-        else:
-            start_date = end_date - timedelta(days=365)  # Default to 1 year if no transactions
-    else:
-        start_date = end_date - timedelta(days=period_days)
-    
-    # Extend end_date to end of current week (Sunday 23:59:59) to include all transactions in current week
-    days_until_sunday = 6 - end_date.weekday()  # 0=Monday, 6=Sunday
-    end_of_current_week = end_date + timedelta(days=days_until_sunday)
-    end_of_current_week = end_of_current_week.replace(hour=23, minute=59, second=59, microsecond=999999)
-    
-    # Generate all weeks in the date range (for weekly breakdown)
-    # Include the current week fully (even if it extends beyond end_date)
-    days_since_monday = start_date.weekday()
-    first_week_start = start_date - timedelta(days=days_since_monday)
-    first_week_start = first_week_start.replace(hour=0, minute=0, second=0, microsecond=0)
-    
-    # Initialize all weeks with zeros
-    # Include weeks up to end of current week
-    weekly_data = {}
-    current_week_start = first_week_start
-    while current_week_start <= end_of_current_week:
-        week_key = current_week_start.strftime('%Y-%m-%d')
-        weekly_data[week_key] = {
-            'week_start': current_week_start,
-            'incoming': 0.0,
-            'outgoing': 0.0
-        }
-        # Move to next week (add 7 days)
-        current_week_start += timedelta(days=7)
-    
-    # Query ALL transactions filtered by type (for total_in and total_out)
-    # This ensures total_in - total_out matches wallet balances calculated from transactions
-    # Exclude own fund transfers (internal transfers between wallets)
-    query_all = Transaction.query.filter(
-        Transaction.currency == 'USDT',  # Only USDT transactions
-        (Transaction.comment != 'Own fund transfer') | (Transaction.comment == None)
-    )
-    
-    if transaction_type and transaction_type.strip():
-        query_all = query_all.filter(Transaction.transaction_type == transaction_type)
-    
-    all_transactions = query_all.all()
-    
-    # Calculate total_in and total_out from ALL transactions (not filtered by date)
-    # Exclude own fund transfers
-    total_in = 0.0
-    total_out = 0.0
-    
-    for tx in all_transactions:
-        # Skip own fund transfers (should already be filtered in query, but double-check)
-        if tx.comment == 'Own fund transfer':
-            continue
-        if tx.direction == 'incoming':
-            total_in += tx.amount
-        elif tx.direction == 'outgoing':
-            total_out += tx.amount
-    
-    # Calculate wallet balances from transactions (for comparison)
-    # Sum of all incoming minus all outgoing per wallet
-    # Exclude own fund transfers
-    wallet_balances_from_tx = {}
-    for tx in all_transactions:
-        # Skip own fund transfers (should already be filtered in query, but double-check)
-        if tx.comment == 'Own fund transfer':
-            continue
-        if tx.wallet_id not in wallet_balances_from_tx:
-            wallet_balances_from_tx[tx.wallet_id] = 0.0
-        if tx.direction == 'incoming':
-            wallet_balances_from_tx[tx.wallet_id] += tx.amount
-        elif tx.direction == 'outgoing':
-            wallet_balances_from_tx[tx.wallet_id] -= tx.amount
-    
-    # Sum balances from transactions (only non-hidden wallets)
-    total_wallet_balance_from_tx = sum(
-        balance for wallet_id, balance in wallet_balances_from_tx.items()
-        if Wallet.query.get(wallet_id) and not Wallet.query.get(wallet_id).is_hidden
-    )
-    
-    # Query transactions filtered by type and date range (for weekly breakdown)
-    # Use end_of_current_week to include all transactions in the current week
-    # Exclude own fund transfers (internal transfers between wallets)
-    query = Transaction.query.filter(
-        Transaction.created_at >= start_date,
-        Transaction.created_at <= end_of_current_week,
-        Transaction.currency == 'USDT',  # Only USDT transactions
-        (Transaction.comment != 'Own fund transfer') | (Transaction.comment == None)
-    )
-    
-    if transaction_type and transaction_type.strip():
-        query = query.filter(Transaction.transaction_type == transaction_type)
-    
-    transactions = query.all()
-    
-    # Fill in weekly transaction data
-    for tx in transactions:
-        # Skip own fund transfers (should already be filtered in query, but double-check)
-        if tx.comment == 'Own fund transfer':
-            continue
-            
-        # Get week start date (Monday)
-        # weekday() returns 0 for Monday, 6 for Sunday
-        days_since_monday = tx.created_at.weekday()
-        week_start = tx.created_at - timedelta(days=days_since_monday)
-        # Set time to start of day
-        week_start = week_start.replace(hour=0, minute=0, second=0, microsecond=0)
-        week_key = week_start.strftime('%Y-%m-%d')
-        
-        # Create week entry if it doesn't exist (for transactions outside the main range)
-        if week_key not in weekly_data:
-            weekly_data[week_key] = {
-                'week_start': week_start,
-                'incoming': 0.0,
-                'outgoing': 0.0
-            }
-        
-        # Process transaction
-        if tx.direction == 'incoming':
-            weekly_data[week_key]['incoming'] += tx.amount
-        elif tx.direction == 'outgoing':
-            weekly_data[week_key]['outgoing'] += tx.amount
-    
-    # Convert to list sorted by week
-    # Filter out weeks that are completely outside the selected period
-    weeks = []
-    for week_key in sorted(weekly_data.keys()):
-        week_data = weekly_data[week_key]
-        week_start = week_data['week_start']
-        
-        # Only include weeks that overlap with the selected period
-        # A week overlaps if its start is before end_date or its end (Sunday) is after start_date
-        week_end = week_start + timedelta(days=6, hours=23, minutes=59, seconds=59)
-        if week_end >= start_date and week_start <= end_date:
-            # Get week number in year (ISO week number)
-            week_number = week_data['week_start'].isocalendar()[1]
-            week_label = f"W{week_number}"
-            
-            weeks.append({
-                'week': week_data['week_start'].strftime('%Y-%m-%d'),
-                'week_label': week_label,
-                'incoming': round(week_data['incoming'], 2),
-                'outgoing': round(week_data['outgoing'], 2)
-            })
-    
-    delta = round(total_in - total_out, 2)
-    
-    return jsonify({
-        'weeks': weeks,
-        'total_in': round(total_in, 2),
-        'total_out': round(total_out, 2),
-        'delta': delta,
-        'wallet_balance_from_tx': round(total_wallet_balance_from_tx, 2),  # Balance calculated from transactions
-        'transaction_type': transaction_type
-    })
-
-@app.route('/api/dashboard/export-excel', methods=['GET'])
-def export_weekly_stats_excel():
-    """Export weekly statistics to Excel file"""
-    from collections import defaultdict
-    
-    transaction_type = request.args.get('transaction_type', '')
-    period_days = request.args.get('period', '365')
-    
-    try:
-        period_days = int(period_days)
-        period_days = max(1, min(period_days, 730))
-    except (ValueError, TypeError):
-        period_days = 365
-    
-    # Calculate date range
-    end_date = datetime.utcnow()
-    start_date = end_date - timedelta(days=period_days)
-    
-    # Query transactions filtered by type and date range
-    # Exclude own fund transfers (internal transfers between wallets)
-    query = Transaction.query.filter(
-        Transaction.created_at >= start_date,
-        Transaction.created_at <= end_date,
-        Transaction.currency == 'USDT',
-        (Transaction.comment != 'Own fund transfer') | (Transaction.comment == None)
-    ).order_by(Transaction.created_at)
-    
-    if transaction_type and transaction_type.strip():
-        query = query.filter(Transaction.transaction_type == transaction_type)
-    
-    transactions = query.all()
-    
-    # Group transactions by date (day)
-    daily_data = defaultdict(lambda: {'in': 0.0, 'out': 0.0})
-    
-    for tx in transactions:
-        # Skip own fund transfers (should already be filtered in query, but double-check)
-        if tx.comment == 'Own fund transfer':
-            continue
-            
-        # Get date without time
-        tx_date = tx.created_at.date()
-        date_key = tx_date.strftime('%Y-%m-%d')
-        
-        if tx.direction == 'incoming':
-            daily_data[date_key]['in'] += tx.amount
-        elif tx.direction == 'outgoing':
-            daily_data[date_key]['out'] += tx.amount
-    
-    # Create Excel workbook
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "Transactions"
-    
-    # Set headers
-    headers = ['DATE', 'IN', 'OUT', 'SALDO']
-    ws.append(headers)
-    
-    # Style headers
-    header_font = Font(bold=True)
-    header_alignment = Alignment(horizontal='center')
-    for cell in ws[1]:
-        cell.font = header_font
-        cell.alignment = header_alignment
-    
-    # Calculate cumulative balance (SALDO)
-    cumulative_balance = 0.0
-    
-    # Sort dates and add data
-    sorted_dates = sorted(daily_data.keys())
-    for date_key in sorted_dates:
-        date_obj = datetime.strptime(date_key, '%Y-%m-%d').date()
-        date_str = date_obj.strftime('%Y-%m-%d')
-        
-        in_amount = daily_data[date_key]['in']
-        out_amount = daily_data[date_key]['out']
-        
-        # Calculate SALDO as cumulative difference
-        cumulative_balance += (in_amount - out_amount)
-        
-        ws.append([
-            date_str,
-            round(in_amount, 2),
-            round(out_amount, 2),
-            round(cumulative_balance, 2)
-        ])
-    
-    # Auto-adjust column widths
-    ws.column_dimensions['A'].width = 12
-    ws.column_dimensions['B'].width = 15
-    ws.column_dimensions['C'].width = 15
-    ws.column_dimensions['D'].width = 15
-    
-    # Create file in memory
-    output = BytesIO()
-    wb.save(output)
-    output.seek(0)
-    
-    # Generate filename based on transaction type
-    if transaction_type and transaction_type.strip():
-        filename = f"{transaction_type.replace(' ', '_')}.xlsx"
-    else:
-        filename = "All_Types.xlsx"
-    
-    return send_file(
-        output,
-        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        as_attachment=True,
-        download_name=filename
-    )
-
-@app.route('/api/dashboard/transaction-types', methods=['GET'])
-def get_transaction_types_stats():
-    """Get statistics by transaction types for the selected period"""
-    period_days = request.args.get('period', '365')
-    direction = request.args.get('direction', 'incoming')  # incoming or outgoing
-    
-    try:
-        period_days = int(period_days)
-        # Limit period to reasonable range (1 day to 2 years)
-        period_days = max(1, min(period_days, 730))
-    except (ValueError, TypeError):
-        period_days = 365
-    
-    if direction not in ['incoming', 'outgoing']:
-        direction = 'incoming'
-    
-    # Calculate date range based on selected period
-    end_date = datetime.utcnow()
-    start_date = end_date - timedelta(days=period_days)
-    
-    # Query transactions filtered by date range and direction
-    query = Transaction.query.filter(
-        Transaction.created_at >= start_date,
-        Transaction.created_at <= end_date,
-        Transaction.currency == 'USDT',
-        Transaction.direction == direction
-    )
-    
-    transactions = query.all()
-    
-    # Group by transaction type
-    type_stats = {}
-    for tx in transactions:
-        tx_type = tx.transaction_type if tx.transaction_type else '(None)'
-        if tx_type not in type_stats:
-            type_stats[tx_type] = 0.0
-        type_stats[tx_type] += tx.amount
-    
-    # Convert to list sorted by amount (descending)
-    types_list = []
-    for tx_type, amount in sorted(type_stats.items(), key=lambda x: x[1], reverse=True):
-        types_list.append({
-            'type': tx_type,
-            'amount': round(amount, 2)
-        })
-    
-    return jsonify({
-        'types': types_list,
-        'direction': direction
-    })
-
-@app.route('/api/dashboard/daily-balances', methods=['GET'])
-def get_daily_balances():
-    """Get daily balances at end of day (24:00) for all wallets"""
-    period_days = request.args.get('period', '90')
-    
-    try:
-        period_days = int(period_days)
-        # Limit period to reasonable range (1 day to 2 years)
-        period_days = max(1, min(period_days, 730))
-    except (ValueError, TypeError):
-        period_days = 90
-    
-    # Calculate date range
-    end_date = datetime.utcnow()
-    start_date = end_date - timedelta(days=period_days)
-    
-    # Get current balances for all wallets
-    wallets = Wallet.query.filter_by(is_hidden=False).all()
-    current_balances = {}
-    for wallet in wallets:
-        current_balances[wallet.id] = {
-            'usdt': wallet.balance_usdt or 0.0,
-            'trx': wallet.balance_trx or 0.0
-        }
-    
-    # Generate all days in the period
-    daily_balances = {}
-    current_day = start_date.replace(hour=0, minute=0, second=0, microsecond=0)
-    
-    while current_day <= end_date:
-        day_key = current_day.strftime('%Y-%m-%d')
-        daily_balances[day_key] = {
-            'date': current_day.strftime('%Y-%m-%d'),
-            'date_label': current_day.strftime('%d.%m'),
-            'usdt': 0.0,
-            'trx': 0.0
-        }
-        current_day += timedelta(days=1)
-    
-    # Calculate balances for each day by working backwards from current balances
-    # For each day, subtract transactions that happened after that day
-    for day_key in sorted(daily_balances.keys(), reverse=True):
-        day_date = datetime.strptime(day_key, '%Y-%m-%d')
-        day_end = day_date.replace(hour=23, minute=59, second=59, microsecond=999999)
-        
-        # Initialize with current balances
-        day_balances_usdt = sum(b['usdt'] for b in current_balances.values())
-        day_balances_trx = sum(b['trx'] for b in current_balances.values())
-        
-        # Find all transactions after this day
-        transactions_after = Transaction.query.filter(
-            Transaction.created_at > day_end,
-            Transaction.created_at <= end_date
-        ).all()
-        
-        # Reverse calculate: subtract incoming, add outgoing
-        for tx in transactions_after:
-            if tx.currency == 'USDT':
-                if tx.direction == 'incoming':
-                    day_balances_usdt -= tx.amount
-                elif tx.direction == 'outgoing':
-                    day_balances_usdt += tx.amount
-            elif tx.currency == 'TRX':
-                if tx.direction == 'incoming':
-                    day_balances_trx -= tx.amount
-                elif tx.direction == 'outgoing':
-                    day_balances_trx += tx.amount
-        
-        daily_balances[day_key]['usdt'] = max(0.0, round(day_balances_usdt, 2))
-        daily_balances[day_key]['trx'] = max(0.0, round(day_balances_trx, 2))
-    
-    # Convert to list sorted by date
-    days = []
-    for day_key in sorted(daily_balances.keys()):
-        days.append(daily_balances[day_key])
-    
-    return jsonify({
-        'days': days
-    })
-
 @app.route('/api/transactions', methods=['GET'])
 def get_transactions():
     hide_small = request.args.get('hide_small', 'false') == 'true'
@@ -1449,11 +1075,10 @@ def get_transactions():
     if hide_trx:
         query = query.filter(Transaction.currency != 'TRX')
     
-    transactions = query.order_by(Transaction.created_at.desc()).all()
-    
-    # Filter small amounts (only for USDT)
     if hide_small:
-        transactions = [t for t in transactions if not (t.currency == 'USDT' and t.amount < 10.0)]
+        query = query.filter((Transaction.currency != 'USDT') | (Transaction.amount >= 10.0))
+    
+    transactions = query.order_by(Transaction.created_at.desc()).all()
     
     return jsonify({
         'transactions': [{
@@ -1479,26 +1104,15 @@ def get_counterparty_name(address):
     """Get customer name from address book if address exists"""
     if not address:
         return None
-    # Strip whitespace for comparison
-    address_clean = address.strip()
+    address_clean = address.strip().lower()
     
-    # Try exact match first
-    entry = AddressBook.query.filter_by(address=address_clean).first()
+    entry = AddressBook.query.filter(
+        func.lower(func.trim(AddressBook.address)) == address_clean
+    ).first()
     if entry:
-        print(f"Found address book entry (exact match) for '{address_clean}': {entry.customer}")
+        print(f"Found address book entry for '{address_clean}': {entry.customer}")
         return entry.customer
-    
-    # Try case-insensitive match (in case addresses are stored differently)
-    all_entries = AddressBook.query.all()
-    for entry in all_entries:
-        if entry.address.strip().lower() == address_clean.lower():
-            print(f"Found address book entry (case-insensitive) for '{address_clean}': {entry.customer} (stored as: '{entry.address}')")
-            return entry.customer
-    
-    print(f"No address book entry found for '{address_clean}'")
-    # Debug: show all addresses in address book for comparison
-    all_addresses = [e.address.strip() for e in AddressBook.query.all()]
-    print(f"Available addresses in address book: {all_addresses[:5]}...")  # Show first 5
+
     return None
 
 def commit_refresh_batch(batch_name, errors):
@@ -1523,13 +1137,10 @@ def is_approve_contract_call(contract_value):
 
 @app.route('/api/transactions/refresh', methods=['POST'])
 def refresh_transactions():
-    TRONGRID_API_KEY = 'edccd59a-8c06-40a5-b5eb-41cc161009c5'
-    TRONGRID_API_URL = 'https://api.trongrid.io'
-    USDT_TRC20_CONTRACT = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t'  # USDT-TRC20 contract address
-    
-    headers = {
-        'TRON-PRO-API-KEY': TRONGRID_API_KEY
-    }
+    try:
+        headers = get_trongrid_headers()
+    except RuntimeError as e:
+        return jsonify({'error': str(e)}), 500
     
     wallets = Wallet.query.all()
     new_count = 0
@@ -2429,395 +2040,6 @@ def update_transactions_counterparty():
         'updated_count': updated_count,
         'customer_name': customer_name
     })
-
-# Transit Payments API Routes
-@app.route('/api/channels', methods=['GET'])
-def get_channels():
-    """Get all channels"""
-    channels = Channel.query.order_by(Channel.created_at).all()
-    return jsonify({
-        'channels': [{
-            'id': ch.id,
-            'name': ch.name,
-            'transaction_type': ch.transaction_type,
-            'agent_balance': getattr(ch, 'agent_balance', 0.0),
-            'not_paid_orders': getattr(ch, 'not_paid_orders', 0),
-            'created_at': ch.created_at.isoformat() if ch.created_at else None,
-            'updated_at': ch.updated_at.isoformat() if ch.updated_at else None
-        } for ch in channels]
-    })
-
-@app.route('/api/channels', methods=['POST'])
-def create_channel():
-    """Create a new channel"""
-    data = request.json
-    name = data.get('name', '').strip()
-    transaction_type = data.get('transaction_type', '').strip()
-    
-    if not name:
-        return jsonify({'error': 'Channel name is required'}), 400
-    
-    if not transaction_type:
-        return jsonify({'error': 'Transaction type is required'}), 400
-    
-    # Validate transaction type
-    valid_types = ['Sell usdt', 'Buy usdt', 'Alex', 'Agent', 'Loan', 'Expence', 'Other', 'Transit']
-    if transaction_type not in valid_types:
-        return jsonify({'error': 'Invalid transaction type'}), 400
-    
-    channel = Channel(name=name, transaction_type=transaction_type)
-    db.session.add(channel)
-    db.session.commit()
-    
-    return jsonify({
-        'success': True,
-        'channel': {
-            'id': channel.id,
-            'name': channel.name,
-            'transaction_type': channel.transaction_type,
-            'agent_balance': getattr(channel, 'agent_balance', 0.0),
-            'not_paid_orders': getattr(channel, 'not_paid_orders', 0),
-            'created_at': channel.created_at.isoformat() if channel.created_at else None,
-            'updated_at': channel.updated_at.isoformat() if channel.updated_at else None
-        }
-    }), 201
-
-@app.route('/api/channels/<int:channel_id>', methods=['PUT'])
-def update_channel(channel_id):
-    """Update a channel"""
-    channel = Channel.query.get_or_404(channel_id)
-    data = request.json
-    name = data.get('name', '').strip()
-    transaction_type = data.get('transaction_type', '').strip()
-    agent_balance = data.get('agent_balance')
-    not_paid_orders = data.get('not_paid_orders')
-    
-    # Only validate name and transaction_type if they are being updated (not empty)
-    if name:
-        channel.name = name
-    
-    if transaction_type:
-        # Validate transaction type
-        valid_types = ['Sell usdt', 'Buy usdt', 'Alex', 'Agent', 'Loan', 'Expence', 'Other', 'Transit']
-        if transaction_type not in valid_types:
-            return jsonify({'error': 'Invalid transaction type'}), 400
-        channel.transaction_type = transaction_type
-    
-    # Update agent_balance and not_paid_orders if provided
-    if agent_balance is not None:
-        try:
-            channel.agent_balance = float(agent_balance)
-        except (ValueError, TypeError):
-            return jsonify({'error': 'Invalid agent_balance value'}), 400
-    
-    if not_paid_orders is not None:
-        try:
-            channel.not_paid_orders = int(not_paid_orders)
-        except (ValueError, TypeError):
-            return jsonify({'error': 'Invalid not_paid_orders value'}), 400
-    
-    channel.updated_at = datetime.utcnow()
-    db.session.commit()
-    
-    return jsonify({
-        'success': True,
-        'channel': {
-            'id': channel.id,
-            'name': channel.name,
-            'transaction_type': channel.transaction_type,
-            'agent_balance': getattr(channel, 'agent_balance', 0.0),
-            'not_paid_orders': getattr(channel, 'not_paid_orders', 0),
-            'created_at': channel.created_at.isoformat() if channel.created_at else None,
-            'updated_at': channel.updated_at.isoformat() if channel.updated_at else None
-        }
-    })
-
-@app.route('/api/channels/<int:channel_id>', methods=['DELETE'])
-def delete_channel(channel_id):
-    """Delete a channel"""
-    channel = Channel.query.get_or_404(channel_id)
-    db.session.delete(channel)
-    db.session.commit()
-    
-    return jsonify({'success': True})
-
-@app.route('/api/channels/<int:channel_id>/payments', methods=['GET'])
-def get_channel_payments(channel_id):
-    """Get payment statistics for a channel with individual transactions and incoming payments"""
-    channel = Channel.query.get_or_404(channel_id)
-    
-    # Get all transactions with matching transaction_type
-    transactions = Transaction.query.filter_by(
-        transaction_type=channel.transaction_type,
-        currency='USDT'
-    ).all()
-    
-    # Get all incoming payments (each as separate row)
-    incoming_payments = IncomingPayment.query.filter_by(channel_id=channel_id).all()
-    
-    # Get agent_balance and not_paid_orders from channel
-    agent_balance = getattr(channel, 'agent_balance', 0.0) or 0.0
-    not_paid_orders = getattr(channel, 'not_paid_orders', 0) or 0
-    
-    # Build list of all rows (transactions + incoming payments)
-    all_rows = []
-    
-    # Add transaction rows
-    for tx in transactions:
-        tx_date = tx.created_at.date()
-        all_rows.append({
-            'type': 'transaction',
-            'date': tx_date,
-            'sort_datetime': tx.created_at,  # For sorting - use transaction datetime
-            'in': tx.amount if tx.direction == 'incoming' else 0.0,
-            'out': tx.amount if tx.direction == 'outgoing' else 0.0,
-            'incoming_payment': 0.0,
-            'profit': 0.0
-        })
-    
-    # Add incoming payment rows (each as separate row)
-    for payment in incoming_payments:
-        # Use payment.date if available, otherwise use created_at date
-        if payment.date:
-            payment_date = payment.date
-            # Create datetime from date for sorting (use start of day)
-            payment_sort_datetime = datetime.combine(payment_date, dt_time.min)
-        else:
-            payment_date = payment.created_at.date()
-            payment_sort_datetime = payment.created_at
-        
-        all_rows.append({
-            'type': 'incoming_payment',
-            'date': payment_date,
-            'sort_datetime': payment_sort_datetime,  # For sorting - use payment.date or created_at
-            'in': 0.0,
-            'out': 0.0,
-            'incoming_payment': payment.sum_amount or 0.0,
-            'profit': 0.0
-        })
-    
-    # Sort by sort_datetime ascending (oldest first) for saldo calculation
-    # If same datetime, transactions come before incoming payments
-    all_rows.sort(key=lambda x: (x['sort_datetime'], 0 if x['type'] == 'transaction' else 1))
-    
-    # Calculate saldo for each row (from oldest to newest)
-    payment_rows = []
-    cumulative_saldo = 0.0  # Start with 0, will accumulate
-    
-    for row in all_rows:
-        # Calculate saldo: previous saldo + in - out - incoming payment - profit
-        cumulative_saldo = cumulative_saldo + row['in'] - row['out'] - row['incoming_payment'] - row['profit']
-        
-        payment_rows.append({
-            'date': row['date'].isoformat(),
-            'in': round(row['in'], 2),
-            'out': round(row['out'], 2),
-            'incoming_payment': round(row['incoming_payment'], 2),
-            'profit': round(row['profit'], 2),
-            'saldo': round(cumulative_saldo, 2)
-        })
-    
-    # Reverse the list to show newest rows first
-    payment_rows.reverse()
-    
-    # Calculate totals
-    total_in = sum(tx.amount for tx in transactions if tx.direction == 'incoming')
-    total_out = sum(tx.amount for tx in transactions if tx.direction == 'outgoing')
-    inc_pmts_sum = sum(payment.sum_amount for payment in incoming_payments if payment.sum_amount)
-    
-    # Final saldo includes agent_balance and not_paid_orders
-    final_saldo = cumulative_saldo - agent_balance - not_paid_orders
-    
-    return jsonify({
-        'channel_id': channel.id,
-        'channel_name': channel.name,
-        'in': round(total_in, 2),
-        'out': round(total_out, 2),
-        'inc_pmts': round(inc_pmts_sum, 2),
-        'agent_balance': round(agent_balance, 2),
-        'not_paid_orders': not_paid_orders,
-        'saldo': round(final_saldo, 2),
-        'payment_rows': payment_rows  # List of individual rows (transactions + incoming payments)
-    })
-
-@app.route('/api/channels/<int:channel_id>/incoming-payments', methods=['GET'])
-def get_channel_incoming_payments(channel_id):
-    """Get incoming payments list for a channel"""
-    channel = Channel.query.get_or_404(channel_id)
-    
-    # Sort by date ascending (oldest first), then by created_at ascending
-    # Payments without date go to the end
-    try:
-        # Try to sort with date first
-        payments_with_date = IncomingPayment.query.filter_by(channel_id=channel_id).filter(IncomingPayment.date.isnot(None)).order_by(IncomingPayment.date.asc(), IncomingPayment.created_at.asc()).all()
-        payments_without_date = IncomingPayment.query.filter_by(channel_id=channel_id).filter(IncomingPayment.date.is_(None)).order_by(IncomingPayment.created_at.asc()).all()
-        payments = payments_with_date + payments_without_date
-    except Exception as e:
-        # Fallback to simple sorting if date filtering doesn't work
-        print(f"Error in sorting: {e}")
-        payments = IncomingPayment.query.filter_by(channel_id=channel_id).order_by(
-            IncomingPayment.created_at.asc()
-        ).all()
-    
-    incoming_payments = []
-    for payment in payments:
-        payment_data = {
-            'id': payment.id,
-            'sum_amount': float(payment.sum_amount) if payment.sum_amount is not None else 0.0,
-            'agent': str(payment.agent) if payment.agent is not None else '',
-            'from_address': str(payment.from_address) if payment.from_address is not None else '',
-            'date': payment.date.strftime('%Y-%m-%d') if payment.date else ''
-        }
-        print(f"Payment {payment.id}: {payment_data}")  # Debug
-        incoming_payments.append(payment_data)
-    
-    return jsonify({
-        'channel_id': channel.id,
-        'incoming_payments': incoming_payments
-    })
-
-@app.route('/api/channels/<int:channel_id>/incoming-payments', methods=['POST'])
-def create_incoming_payment(channel_id):
-    """Create a new incoming payment"""
-    channel = Channel.query.get_or_404(channel_id)
-    data = request.json
-    
-    print(f"Received data: {data}")  # Debug
-    
-    sum_amount = data.get('sum_amount', 0)
-    agent = data.get('agent', '')
-    from_address = data.get('from_address', '')
-    date_str = data.get('date', '')
-    
-    # Strip strings if they are strings
-    if isinstance(agent, str):
-        agent = agent.strip()
-    if isinstance(from_address, str):
-        from_address = from_address.strip()
-    if isinstance(date_str, str):
-        date_str = date_str.strip()
-    
-    # Allow sum_amount to be 0 or empty for new rows
-    if sum_amount is None:
-        sum_amount = 0
-    
-    try:
-        sum_amount = float(sum_amount)
-    except (ValueError, TypeError):
-        sum_amount = 0
-    
-    date = None
-    if date_str:
-        try:
-            date = datetime.strptime(date_str, '%Y-%m-%d').date()
-        except ValueError:
-            return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD'}), 400
-    
-    payment = IncomingPayment(
-        channel_id=channel_id,
-        sum_amount=sum_amount,
-        agent=agent if agent else '',
-        from_address=from_address if from_address else '',
-        date=date
-    )
-    db.session.add(payment)
-    db.session.commit()
-    
-    # Refresh to get the saved payment
-    db.session.refresh(payment)
-    
-    print(f"Saved payment: id={payment.id}, sum_amount={payment.sum_amount}, agent={payment.agent}, from_address={payment.from_address}, date={payment.date}")  # Debug
-    
-    return jsonify({
-        'success': True,
-        'payment': {
-            'id': payment.id,
-            'sum_amount': float(payment.sum_amount) if payment.sum_amount is not None else 0.0,
-            'agent': payment.agent if payment.agent else '',
-            'from_address': payment.from_address if payment.from_address else '',
-            'date': payment.date.strftime('%Y-%m-%d') if payment.date else ''
-        }
-    }), 201
-
-@app.route('/api/incoming-payments/<int:payment_id>', methods=['PUT'])
-def update_incoming_payment(payment_id):
-    """Update an incoming payment"""
-    try:
-        payment = IncomingPayment.query.get_or_404(payment_id)
-        data = request.json
-        
-        if not data:
-            return jsonify({'error': 'No data provided'}), 400
-        
-        sum_amount = data.get('sum_amount')
-        agent = data.get('agent', '')
-        from_address = data.get('from_address', '')
-        date_str = data.get('date', '')
-        
-        # Handle sum_amount - always update if provided
-        if sum_amount is not None:
-            try:
-                # Convert to float, handle empty string as 0
-                if sum_amount == '' or sum_amount is None:
-                    sum_amount = 0.0
-                else:
-                    sum_amount = float(sum_amount)
-                payment.sum_amount = sum_amount
-            except (ValueError, TypeError) as e:
-                print(f"Error converting sum_amount: {e}, value: {sum_amount}")
-                return jsonify({'error': f'Invalid SUM amount: {sum_amount}'}), 400
-        
-        # Handle agent and from_address - convert empty strings to empty strings (not None)
-        if isinstance(agent, str):
-            payment.agent = agent.strip() if agent.strip() else ''
-        else:
-            payment.agent = str(agent) if agent else ''
-        
-        if isinstance(from_address, str):
-            payment.from_address = from_address.strip() if from_address.strip() else ''
-        else:
-            payment.from_address = str(from_address) if from_address else ''
-        
-        # Handle date
-        if date_str and isinstance(date_str, str) and date_str.strip():
-            try:
-                payment.date = datetime.strptime(date_str.strip(), '%Y-%m-%d').date()
-            except ValueError as e:
-                print(f"Error parsing date: {e}, value: {date_str}")
-                return jsonify({'error': f'Invalid date format. Use YYYY-MM-DD, got: {date_str}'}), 400
-        else:
-            payment.date = None
-        
-        payment.updated_at = datetime.utcnow()
-        db.session.commit()
-        
-        print(f"Updated payment {payment_id}: sum={payment.sum_amount}, agent={payment.agent}, from={payment.from_address}, date={payment.date}")  # Debug
-        
-        return jsonify({
-            'success': True,
-            'payment': {
-                'id': payment.id,
-                'sum_amount': float(payment.sum_amount) if payment.sum_amount is not None else 0.0,
-                'agent': payment.agent if payment.agent else '',
-                'from_address': payment.from_address if payment.from_address else '',
-                'date': payment.date.strftime('%Y-%m-%d') if payment.date else ''
-            }
-        })
-    except Exception as e:
-        print(f"Error updating payment {payment_id}: {e}")
-        import traceback
-        traceback.print_exc()
-        db.session.rollback()
-        return jsonify({'error': f'Server error: {str(e)}'}), 500
-
-@app.route('/api/incoming-payments/<int:payment_id>', methods=['DELETE'])
-def delete_incoming_payment(payment_id):
-    """Delete an incoming payment"""
-    payment = IncomingPayment.query.get_or_404(payment_id)
-    db.session.delete(payment)
-    db.session.commit()
-    
-    return jsonify({'success': True})
 
 @app.route('/api/transactions/remove-duplicates', methods=['POST'])
 def remove_duplicate_transactions():
