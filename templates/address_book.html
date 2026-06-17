@@ -2,15 +2,15 @@
 
 {% block content %}
 <div class="page-header">
-    <h1>Address Book</h1>
+    <h1>Contacts</h1>
     <p>Manage customer addresses and AML status</p>
 </div>
 
 <div class="card">
     <div class="card-header">
-        <h2 class="card-title">Addresses</h2>
+        <h2 class="card-title">Contacts</h2>
         <div class="controls">
-            <button class="btn btn-sm" onclick="openAddAddressModal()">+ Add Address</button>
+            <button class="btn btn-sm" onclick="openAddAddressModal()">+ Add Contact</button>
         </div>
     </div>
     
@@ -27,17 +27,17 @@
                 </tr>
             </thead>
             <tbody id="addressTable">
-                <!-- Addresses will be loaded here -->
+                <!-- Contacts will be loaded here -->
             </tbody>
         </table>
     </div>
 </div>
 
-<!-- Add/Edit Address Modal -->
+<!-- Add/Edit Contact Modal -->
 <div id="addressModal" class="modal">
     <div class="modal-content">
         <div class="modal-header">
-            <h2 id="addressModalTitle">Add Address</h2>
+            <h2 id="addressModalTitle">Add Contact</h2>
         </div>
         <form id="addressForm" onsubmit="saveAddress(event)">
             <div class="form-group">

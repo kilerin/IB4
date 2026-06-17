@@ -13,6 +13,7 @@ const state = {
     hideOwn: localStorage.getItem('miniHideOwn') !== 'false',
   },
   txSort: localStorage.getItem('miniTxSort') || 'date_desc',
+  showHiddenWallets: localStorage.getItem('miniShowHiddenWallets') === 'true',
 };
 
 const COLORS = {
@@ -104,6 +105,7 @@ async function api(path, options = {}, retryAuth = true) {
 async function loadAll() {
   await Promise.allSettled([loadWallets(), loadTransactions(), loadReserves(), loadAddressBook(), loadAmlChecks()]);
   renderWallets();
+  renderTransactions();
   renderAddressBook();
   renderAml();
 }
@@ -111,8 +113,11 @@ async function loadAll() {
 async function reloadActiveScreen() {
   try {
     if (state.activeScreen === 'wallets') {
-      await Promise.all([loadWallets(), loadTransactions(), loadReserves()]);
+      await Promise.all([loadWallets(), loadReserves()]);
       renderWallets();
+    } else if (state.activeScreen === 'transactions') {
+      await loadTransactions();
+      renderTransactions();
     } else if (state.activeScreen === 'addressBook') {
       await loadAddressBook();
       renderAddressBook();
@@ -162,9 +167,7 @@ function renderWallets() {
   const screen = document.getElementById('walletsScreen');
   const reserveTotal = state.reserves.reduce((sum, reserve) => sum + Number(reserve.amount || 0), 0);
   const available = Number(state.totalUsdt || 0) - reserveTotal;
-  const transactions = sortTransactions(
-    state.transactions.filter((tx) => !state.filters.hideOwn || tx.comment !== 'Own fund transfer')
-  );
+  const wallets = state.showHiddenWallets ? state.wallets : state.wallets.filter((wallet) => !wallet.is_hidden);
 
   screen.innerHTML = `
     <div class="summary-grid">
@@ -175,9 +178,33 @@ function renderWallets() {
     </div>
     <div class="toolbar">
       <button class="primary-btn" data-action="refreshBalances">Refresh balances</button>
-      <button class="ghost-btn" data-action="refreshTransactions">Refresh tx</button>
       <button class="ghost-btn" data-action="addWallet">Add wallet</button>
       <button class="ghost-btn" data-action="reserves">Reserves</button>
+    </div>
+    <div class="filters">
+      <label><input type="checkbox" id="showHiddenWallets" ${state.showHiddenWallets ? 'checked' : ''}> Show hidden</label>
+    </div>
+    <h2>Wallets</h2>
+    <div class="wallet-list">${wallets.map(walletCard).join('') || empty(state.showHiddenWallets ? 'No wallets' : 'No visible wallets')}</div>
+  `;
+
+  screen.querySelector('[data-action="refreshBalances"]').addEventListener('click', () => runAction('/api/wallets/refresh-balances', 'Balances refreshed'));
+  screen.querySelector('[data-action="addWallet"]').addEventListener('click', openWalletForm);
+  screen.querySelector('[data-action="reserves"]').addEventListener('click', openReservesSheet);
+  screen.querySelector('#showHiddenWallets').addEventListener('change', updateWalletVisibility);
+  screen.querySelectorAll('[data-wallet]').forEach((button) => button.addEventListener('click', () => openWalletDetails(Number(button.dataset.wallet))));
+  screen.querySelectorAll('[data-copy-address]').forEach((button) => button.addEventListener('click', () => copyText(button.dataset.copyAddress, 'Wallet address copied')));
+}
+
+function renderTransactions() {
+  const screen = document.getElementById('transactionsScreen');
+  const transactions = sortTransactions(
+    state.transactions.filter((tx) => !state.filters.hideOwn || tx.comment !== 'Own fund transfer')
+  );
+
+  screen.innerHTML = `
+    <div class="toolbar">
+      <button class="primary-btn" data-action="refreshTransactions">Refresh transactions</button>
       <button class="ghost-btn" data-action="dedupe">Dedupe</button>
     </div>
     <div class="filters">
@@ -193,23 +220,15 @@ function renderWallets() {
         </select>
       </label>
     </div>
-    <h2>Wallets</h2>
-    <div class="wallet-list">${state.wallets.map(walletCard).join('') || empty('No wallets')}</div>
-    <h2>Transactions</h2>
     <div class="transaction-list">${transactions.map(transactionRow).join('') || empty('No transactions')}</div>
   `;
 
-  screen.querySelector('[data-action="refreshBalances"]').addEventListener('click', () => runAction('/api/wallets/refresh-balances', 'Balances refreshed'));
   screen.querySelector('[data-action="refreshTransactions"]').addEventListener('click', () => runAction('/api/transactions/refresh', 'Transactions refreshed'));
-  screen.querySelector('[data-action="addWallet"]').addEventListener('click', openWalletForm);
-  screen.querySelector('[data-action="reserves"]').addEventListener('click', openReservesSheet);
   screen.querySelector('[data-action="dedupe"]').addEventListener('click', () => runAction('/api/transactions/remove-duplicates', 'Duplicates removed'));
   screen.querySelector('#hideSmall').addEventListener('change', updateFilters);
   screen.querySelector('#hideTrx').addEventListener('change', updateFilters);
   screen.querySelector('#hideOwn').addEventListener('change', updateFilters);
   screen.querySelector('#txSort').addEventListener('change', updateSort);
-  screen.querySelectorAll('[data-wallet]').forEach((button) => button.addEventListener('click', () => openWalletDetails(Number(button.dataset.wallet))));
-  screen.querySelectorAll('[data-move-wallet]').forEach((button) => button.addEventListener('click', () => moveWallet(Number(button.dataset.moveWallet), button.dataset.direction)));
   screen.querySelectorAll('[data-comment]').forEach((button) => button.addEventListener('click', () => editTransactionComment(Number(button.dataset.comment))));
   screen.querySelectorAll('[data-type]').forEach((button) => button.addEventListener('click', () => editTransactionType(Number(button.dataset.type))));
   screen.querySelectorAll('[data-address]').forEach((button) => button.addEventListener('click', () => openAddressForm({address: button.dataset.address})));
@@ -222,27 +241,27 @@ function metric(label, value) {
 function walletCard(wallet) {
   const color = COLORS[wallet.color] || COLORS.gray;
   const hidden = wallet.is_hidden ? '<span class="badge warn">Hidden</span>' : '';
-  const needCheck = wallet.balance_changed ? '<span class="badge danger">Need AML</span>' : '';
   return `
     <article class="wallet-card" style="--wallet-color:${color}">
       <header>
-        <div>
-          <p class="wallet-name">${escapeHtml(wallet.name)}</p>
-          <p class="address">${short(wallet.address)}</p>
-        </div>
-        <button class="chip" data-wallet="${wallet.id}">Open</button>
+        <button class="wallet-title-btn" data-wallet="${wallet.id}" type="button">${escapeHtml(wallet.name)}</button>
+        <span class="wallet-usdt">${money(wallet.balance_usdt)} USDT</span>
       </header>
-      <div class="balance-line">
-        <span class="balance-pill">${money(wallet.balance_usdt)} USDT</span>
-        <span class="balance-pill">${money(wallet.balance_trx)} TRX</span>
-      </div>
+      <div class="wallet-trx">${money(wallet.balance_trx)} TRX</div>
+      <button class="wallet-address" data-copy-address="${escapeHtmlAttr(wallet.address || '')}" type="button">
+        ${escapeHtml(wallet.address || '-')}
+      </button>
       <div class="toolbar">
-        ${hidden}${needCheck}<span class="badge">${escapeHtml(wallet.aml_risk_level || wallet.aml_status || 'AML pending')}</span>
-        <button class="ghost-btn" data-move-wallet="${wallet.id}" data-direction="up">Up</button>
-        <button class="ghost-btn" data-move-wallet="${wallet.id}" data-direction="down">Down</button>
+        ${hidden}
       </div>
     </article>
   `;
+}
+
+function updateWalletVisibility() {
+  state.showHiddenWallets = document.getElementById('showHiddenWallets').checked;
+  localStorage.setItem('miniShowHiddenWallets', state.showHiddenWallets);
+  renderWallets();
 }
 
 function transactionRow(tx) {
@@ -273,13 +292,13 @@ async function updateFilters() {
   localStorage.setItem('miniHideTrx', state.filters.hideTrx);
   localStorage.setItem('miniHideOwn', state.filters.hideOwn);
   await loadTransactions();
-  renderWallets();
+  renderTransactions();
 }
 
 function updateSort() {
   state.txSort = document.getElementById('txSort').value;
   localStorage.setItem('miniTxSort', state.txSort);
-  renderWallets();
+  renderTransactions();
 }
 
 function sortTransactions(transactions) {
@@ -435,15 +454,15 @@ async function editTransactionType(id) {
 function renderAddressBook() {
   const screen = document.getElementById('addressBookScreen');
   screen.innerHTML = `
-    <div class="toolbar"><button class="primary-btn" id="addAddressBtn">Add address</button></div>
-    <div class="address-list">${state.addresses.map(addressRow).join('') || empty('No addresses')}</div>
+    <div class="toolbar"><button class="primary-btn" id="addAddressBtn">Add contact</button></div>
+    <div class="address-list">${state.addresses.map(addressRow).join('') || empty('No contacts')}</div>
   `;
   document.getElementById('addAddressBtn').addEventListener('click', () => openAddressForm());
   screen.querySelectorAll('[data-edit-address]').forEach((button) => button.addEventListener('click', () => {
     openAddressForm(state.addresses.find((item) => item.id === Number(button.dataset.editAddress)));
   }));
   screen.querySelectorAll('[data-delete-address]').forEach((button) => button.addEventListener('click', async () => {
-    if (!confirm('Delete this address?')) return;
+    if (!confirm('Delete this contact?')) return;
     await api(`/api/addressbook/${button.dataset.deleteAddress}`, {method: 'DELETE'});
     await reloadActiveScreen();
   }));
@@ -465,7 +484,7 @@ function addressRow(entry) {
 
 function openAddressForm(entry = {}) {
   openSheet(`
-    <h2>${entry.id ? 'Edit address' : 'Add address'}</h2>
+    <h2>${entry.id ? 'Edit contact' : 'Add contact'}</h2>
     <form class="form-grid" id="addressForm">
       <label class="field"><span>Customer</span><input name="customer" value="${escapeHtmlAttr(entry.customer || '')}" required></label>
       <label class="field"><span>Address</span><input name="address" value="${escapeHtmlAttr(entry.address || '')}" required></label>
@@ -550,6 +569,28 @@ function closeSheet() {
 function notify(message) {
   tg?.showPopup ? tg.showPopup({message}) : alert(message);
   haptic('notification');
+}
+
+async function copyText(text, successMessage = 'Copied') {
+  if (!text) return;
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.setAttribute('readonly', '');
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+    }
+    notify(successMessage);
+  } catch (error) {
+    notify('Copy failed');
+  }
 }
 
 function haptic(type) {

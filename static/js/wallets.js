@@ -624,7 +624,7 @@ function displayTransactions(transactions) {
                 <span class="address-short">${shortAddress}</span>
                 ${address ? `
                     <img src="/static/ico/copy.svg" class="copy-icon" onclick="copyToClipboard('${escapeHtml(address)}')" title="Copy address" alt="Copy">
-                    <img src="/static/ico/vote.svg" class="copy-icon" onclick="openAddAddressModal('${escapeHtml(address)}')" title="Add to Address Book" alt="Add" style="margin-left: 4px;">
+                    <img src="/static/ico/vote.svg" class="copy-icon" onclick="openAddAddressModal('${escapeHtml(address)}')" title="Add to Contacts" alt="Add" style="margin-left: 4px;">
                 ` : ''}
             </td>
             <td>${dateStr} ${timeStr}</td>
@@ -1212,7 +1212,7 @@ function editReserve(reserveId) {
     openReserveModal(reserveId);
 }
 
-// Add Address to Address Book from Transaction
+// Add Address to Contacts from Transaction
 function openAddAddressModal(address) {
     const modal = document.getElementById('addAddressModal');
     const addressInput = document.getElementById('addressBookAddress');
@@ -1248,7 +1248,7 @@ async function saveAddressFromTransaction(event) {
     }
     
     try {
-        // Add address to address book
+        // Add address to contacts
         const response = await fetch('/api/addressbook', {
             method: 'POST',
             headers: {
@@ -1270,7 +1270,7 @@ async function saveAddressFromTransaction(event) {
                 // Reload transactions to show updated names
                 loadTransactions();
             } else {
-                showNotification('Address added to address book');
+                showNotification('Address added to contacts');
             }
             
             closeAddAddressModal();

@@ -22,7 +22,7 @@ function displayAddresses(addresses) {
     tbody.innerHTML = '';
     
     if (addresses.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" class="text-muted" style="text-align: center; padding: 40px;">No addresses found</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" class="text-muted" style="text-align: center; padding: 40px;">No contacts found</td></tr>';
         return;
     }
     
@@ -148,7 +148,7 @@ function openAddAddressModal(addressId = null) {
     const form = document.getElementById('addressForm');
     
     if (addressId) {
-        title.textContent = 'Edit Address';
+        title.textContent = 'Edit Contact';
         submitBtn.textContent = 'Save';
         
         // Load address data
@@ -164,7 +164,7 @@ function openAddAddressModal(addressId = null) {
                 }
             });
     } else {
-        title.textContent = 'Add Address';
+        title.textContent = 'Add Contact';
         submitBtn.textContent = 'Add';
         form.reset();
     }
@@ -209,7 +209,7 @@ async function saveAddress(event) {
         if (response.ok) {
             closeAddressModal();
             loadAddresses();
-            showNotification(editingAddressId ? 'Address updated' : 'Address added');
+            showNotification(editingAddressId ? 'Contact updated' : 'Contact added');
         } else {
             const data = await response.json();
             if (data.error === 'Address already exists' && data.existing) {
