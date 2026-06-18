@@ -14,6 +14,12 @@ const state = {
   },
   txSort: localStorage.getItem('miniTxSort') || 'date_desc',
   showHiddenWallets: localStorage.getItem('miniShowHiddenWallets') === 'true',
+  activeCabinet: localStorage.getItem('miniActiveCabinet') || 'main',
+};
+
+const CABINETS = {
+  main: 'Main',
+  new: 'New Cabinet',
 };
 
 const COLORS = {
@@ -102,6 +108,11 @@ async function api(path, options = {}, retryAuth = true) {
   return data;
 }
 
+function withCabinet(path) {
+  const separator = path.includes('?') ? '&' : '?';
+  return `${path}${separator}cabinet=${encodeURIComponent(state.activeCabinet)}`;
+}
+
 async function loadAll() {
   await Promise.allSettled([loadWallets(), loadTransactions(), loadReserves(), loadAddressBook(), loadAmlChecks()]);
   renderWallets();
@@ -132,7 +143,7 @@ async function reloadActiveScreen() {
 }
 
 async function loadWallets() {
-  const data = await api('/api/wallets?show_hidden=true');
+  const data = await api(withCabinet('/api/wallets?show_hidden=true'));
   state.wallets = data.wallets || [];
   state.totalUsdt = data.total_usdt || 0;
   state.totalTrx = data.total_trx || 0;
@@ -142,6 +153,7 @@ async function loadTransactions(walletId = null) {
   const params = new URLSearchParams({
     hide_small: state.filters.hideSmall,
     hide_trx: state.filters.hideTrx,
+    cabinet: state.activeCabinet,
   });
   if (walletId) params.set('wallet_id', walletId);
   const data = await api(`/api/transactions?${params.toString()}`);
@@ -149,7 +161,7 @@ async function loadTransactions(walletId = null) {
 }
 
 async function loadReserves() {
-  const data = await api('/api/reserves');
+  const data = await api(withCabinet('/api/reserves'));
   state.reserves = data.reserves || [];
 }
 
@@ -181,6 +193,11 @@ function renderWallets() {
       <button class="ghost-btn" data-action="addWallet">Add wallet</button>
       <button class="ghost-btn" data-action="reserves">Reserves</button>
     </div>
+    <label class="field cabinet-field"><span>Cabinet</span>
+      <select id="cabinetSelector">
+        ${Object.entries(CABINETS).map(([key, label]) => `<option value="${key}" ${state.activeCabinet === key ? 'selected' : ''}>${label}</option>`).join('')}
+      </select>
+    </label>
     <div class="filters">
       <label><input type="checkbox" id="showHiddenWallets" ${state.showHiddenWallets ? 'checked' : ''}> Show hidden</label>
     </div>
@@ -191,6 +208,7 @@ function renderWallets() {
   screen.querySelector('[data-action="refreshBalances"]').addEventListener('click', () => runAction('/api/wallets/refresh-balances', 'Balances refreshed'));
   screen.querySelector('[data-action="addWallet"]').addEventListener('click', openWalletForm);
   screen.querySelector('[data-action="reserves"]').addEventListener('click', openReservesSheet);
+  screen.querySelector('#cabinetSelector').addEventListener('change', updateCabinet);
   screen.querySelector('#showHiddenWallets').addEventListener('change', updateWalletVisibility);
   screen.querySelectorAll('[data-wallet]').forEach((button) => button.addEventListener('click', () => openWalletDetails(Number(button.dataset.wallet))));
   screen.querySelectorAll('[data-copy-address]').forEach((button) => button.addEventListener('click', () => copyText(button.dataset.copyAddress, 'Wallet address copied')));
@@ -264,6 +282,14 @@ function updateWalletVisibility() {
   renderWallets();
 }
 
+async function updateCabinet() {
+  state.activeCabinet = document.getElementById('cabinetSelector').value || 'main';
+  localStorage.setItem('miniActiveCabinet', state.activeCabinet);
+  await Promise.all([loadWallets(), loadTransactions(), loadReserves()]);
+  renderWallets();
+  renderTransactions();
+}
+
 function transactionRow(tx) {
   const counterparty = tx.direction === 'incoming' ? tx.from_address : tx.to_address;
   return `
@@ -320,7 +346,7 @@ async function moveWallet(walletId, direction) {
   wallets.splice(targetIndex, 0, wallet);
   await api('/api/wallets/reorder', {
     method: 'POST',
-    body: JSON.stringify({order: wallets.map((item) => item.id)}),
+    body: JSON.stringify({order: wallets.map((item) => item.id), cabinet: state.activeCabinet}),
   });
   await reloadActiveScreen();
 }
@@ -354,7 +380,7 @@ function openWalletForm(wallet = null) {
     if (!wallet) payload.address = form.get('address');
     await api(wallet ? `/api/wallets/${wallet.id}` : '/api/wallets', {
       method: wallet ? 'PUT' : 'POST',
-      body: JSON.stringify(payload),
+      body: JSON.stringify({...payload, cabinet: state.activeCabinet}),
     });
     closeSheet();
     await reloadActiveScreen();
@@ -417,7 +443,7 @@ function openReservesSheet() {
     editReserve(reserve);
   }));
   document.querySelectorAll('[data-reserve]').forEach((button) => button.addEventListener('click', async () => {
-    await api(`/api/reserves/${button.dataset.reserve}`, {method: 'DELETE'});
+    await api(withCabinet(`/api/reserves/${button.dataset.reserve}`), {method: 'DELETE'});
     await loadReserves();
     openReservesSheet();
   }));
@@ -427,9 +453,9 @@ async function editReserve(reserve = null) {
   const amount = prompt('Reserve amount', reserve?.amount ?? '');
   if (!amount) return;
   const comment = prompt('Comment', reserve?.comment || '') || '';
-  await api(reserve ? `/api/reserves/${reserve.id}` : '/api/reserves', {
+  await api(reserve ? withCabinet(`/api/reserves/${reserve.id}`) : '/api/reserves', {
     method: reserve ? 'PUT' : 'POST',
-    body: JSON.stringify({amount, comment}),
+    body: JSON.stringify({amount, comment, cabinet: state.activeCabinet}),
   });
   await loadReserves();
   openReservesSheet();
@@ -544,7 +570,7 @@ function amlRow(check) {
 
 async function runAction(path, successMessage) {
   try {
-    await api(path, {method: 'POST'});
+    await api(path, {method: 'POST', body: JSON.stringify({cabinet: state.activeCabinet})});
     notify(successMessage);
     await reloadActiveScreen();
   } catch (error) {

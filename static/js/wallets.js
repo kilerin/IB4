@@ -1,5 +1,15 @@
 let sortableInstance = null;
 let currentSort = { field: null, direction: 'asc' }; // 'asc' or 'desc'
+let activeCabinet = localStorage.getItem('activeCabinet') || 'main';
+
+function cabinetParam() {
+    return encodeURIComponent(activeCabinet);
+}
+
+function apiWithCabinet(path) {
+    const separator = path.includes('?') ? '&' : '?';
+    return `${path}${separator}cabinet=${cabinetParam()}`;
+}
 
 // Load wallets on page load
 document.addEventListener('DOMContentLoaded', function() {
@@ -20,6 +30,18 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     if (hideOwnFundTransferCheckbox) {
         hideOwnFundTransferCheckbox.checked = hideOwnFundTransfer;
+    }
+
+    const cabinetSelector = document.getElementById('cabinetSelector');
+    if (cabinetSelector) {
+        cabinetSelector.value = activeCabinet;
+        cabinetSelector.addEventListener('change', function() {
+            activeCabinet = this.value || 'main';
+            localStorage.setItem('activeCabinet', activeCabinet);
+            loadWallets();
+            loadTransactions();
+            loadReserves();
+        });
     }
     
     loadWallets();
@@ -77,7 +99,7 @@ let showHiddenWallets = false;
 // Load wallets
 async function loadWallets() {
     try {
-        const response = await fetch(`/api/wallets?show_hidden=${showHiddenWallets}`);
+        const response = await fetch(apiWithCabinet(`/api/wallets?show_hidden=${showHiddenWallets}`));
         const data = await response.json();
         
         displayWallets(data.wallets);
@@ -189,7 +211,7 @@ function updateTotals(totalUsdt, totalTrx) {
 
 function updateAvailableUsdtFromReserves() {
     // Get current reserves total
-    fetch('/api/reserves/total')
+    fetch(apiWithCabinet('/api/reserves/total'))
         .then(response => response.json())
         .then(data => {
             const totalReserves = data.total || 0;
@@ -256,7 +278,7 @@ async function reorderWallets() {
         const response = await fetch('/api/wallets/reorder', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ order })
+            body: JSON.stringify({ order, cabinet: activeCabinet })
         });
         
         if (!response.ok) {
@@ -285,7 +307,9 @@ async function refreshBalances() {
         
         showNotification('Обновление балансов...');
         const response = await fetch('/api/wallets/refresh-balances', {
-            method: 'POST'
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ cabinet: activeCabinet })
         });
         
         if (response.ok) {
@@ -414,7 +438,7 @@ function startAmlStatusPolling(walletId) {
         attempts++;
         
         try {
-            const response = await fetch(`/api/wallets?wallet_id=${walletId}`);
+            const response = await fetch(apiWithCabinet(`/api/wallets?wallet_id=${walletId}`));
             const data = await response.json();
             
             if (data.wallets && data.wallets.length > 0) {
@@ -485,7 +509,7 @@ async function addWallet(event) {
         const response = await fetch('/api/wallets', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, address, color })
+            body: JSON.stringify({ name, address, color, cabinet: activeCabinet })
         });
         
         if (response.ok) {
@@ -509,11 +533,11 @@ async function loadTransactions() {
     try {
         const hideSmall = document.getElementById('hideSmall').checked;
         const hideTrx = document.getElementById('hideTrx').checked;
-        const response = await fetch(`/api/transactions?hide_small=${hideSmall}&hide_trx=${hideTrx}`);
+        const response = await fetch(apiWithCabinet(`/api/transactions?hide_small=${hideSmall}&hide_trx=${hideTrx}`));
         const data = await response.json();
         
         // Store all transactions for export (without filters)
-        const allResponse = await fetch('/api/transactions?hide_small=false&hide_trx=false');
+        const allResponse = await fetch(apiWithCabinet('/api/transactions?hide_small=false&hide_trx=false'));
         const allData = await allResponse.json();
         allTransactions = allData.transactions;
         
@@ -755,7 +779,9 @@ async function refreshTransactions() {
         
         showNotification('Обновление транзакций...');
         const response = await fetch('/api/transactions/refresh', {
-            method: 'POST'
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ cabinet: activeCabinet })
         });
         
         if (response.ok) {
@@ -792,7 +818,9 @@ async function removeDuplicateTransactions() {
     try {
         showNotification('Поиск и удаление дубликатов...');
         const response = await fetch('/api/transactions/remove-duplicates', {
-            method: 'POST'
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ cabinet: activeCabinet })
         });
         
         if (response.ok) {
@@ -887,7 +915,7 @@ async function openWalletDetails(walletId) {
     
     try {
         // Load wallet data - request specific wallet regardless of hidden status
-        const walletResponse = await fetch(`/api/wallets?wallet_id=${walletId}`);
+        const walletResponse = await fetch(apiWithCabinet(`/api/wallets?wallet_id=${walletId}`));
         const walletData = await walletResponse.json();
         
         if (!walletData.wallets || walletData.wallets.length === 0) {
@@ -921,7 +949,7 @@ function closeWalletDetailsModal() {
 
 async function loadWalletTransactions(walletId) {
     try {
-        const response = await fetch(`/api/transactions?wallet_id=${walletId}`);
+        const response = await fetch(apiWithCabinet(`/api/transactions?wallet_id=${walletId}`));
         const data = await response.json();
         
         const tbody = document.getElementById('walletTransactionsTable');
@@ -1062,12 +1090,12 @@ let editingReserveId = null;
 
 async function loadReserves() {
     try {
-        const response = await fetch('/api/reserves');
+        const response = await fetch(apiWithCabinet('/api/reserves'));
         const data = await response.json();
         displayReserves(data.reserves);
         
         // Load total reserves
-        const totalResponse = await fetch('/api/reserves/total');
+        const totalResponse = await fetch(apiWithCabinet('/api/reserves/total'));
         const totalData = await totalResponse.json();
         const totalReserves = totalData.total || 0;
         document.getElementById('totalReserves').textContent = Math.floor(totalReserves).toLocaleString('ru-RU');
@@ -1127,7 +1155,7 @@ function openReserveModal(reserveId = null) {
         submitBtn.textContent = 'Save';
         
         // Load reserve data
-        fetch(`/api/reserves`)
+        fetch(apiWithCabinet('/api/reserves'))
             .then(response => response.json())
             .then(data => {
                 const reserve = data.reserves.find(r => r.id === reserveId);
@@ -1165,14 +1193,14 @@ async function saveReserve(event) {
     
     try {
         const url = editingReserveId 
-            ? `/api/reserves/${editingReserveId}`
+            ? apiWithCabinet(`/api/reserves/${editingReserveId}`)
             : '/api/reserves';
         const method = editingReserveId ? 'PUT' : 'POST';
         
         const response = await fetch(url, {
             method: method,
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ amount, comment })
+            body: JSON.stringify({ amount, comment, cabinet: activeCabinet })
         });
         
         if (response.ok) {
@@ -1192,7 +1220,7 @@ async function saveReserve(event) {
 
 async function deleteReserve(reserveId) {
     try {
-        const response = await fetch(`/api/reserves/${reserveId}`, {
+        const response = await fetch(apiWithCabinet(`/api/reserves/${reserveId}`), {
             method: 'DELETE'
         });
         

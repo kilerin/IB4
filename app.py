@@ -64,6 +64,22 @@ JWT_EXPIRES_SECONDS = int(os.getenv('JWT_EXPIRES_SECONDS', '86400'))
 
 db = SQLAlchemy(app)
 
+CABINETS = {
+    'main': 'Main',
+    'new': 'New Cabinet',
+}
+DEFAULT_CABINET = 'main'
+
+def normalize_cabinet(value):
+    return value if value in CABINETS else DEFAULT_CABINET
+
+def selected_cabinet():
+    cabinet = request.args.get('cabinet')
+    if not cabinet and request.method in {'POST', 'PUT', 'PATCH', 'DELETE'}:
+        data = request.get_json(silent=True) or {}
+        cabinet = data.get('cabinet')
+    return normalize_cabinet(cabinet)
+
 def require_env(name):
     value = os.getenv(name)
     if not value:
@@ -127,6 +143,7 @@ def require_login():
 # Models
 class Wallet(db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    cabinet = db.Column(db.String(50), default=DEFAULT_CABINET, nullable=False, index=True)
     name = db.Column(db.String(100), nullable=False)
     address = db.Column(db.String(200), unique=True, nullable=False)
     balance_usdt = db.Column(db.Float, default=0.0)
@@ -144,6 +161,7 @@ class Wallet(db.Model):
 
 class Transaction(db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    cabinet = db.Column(db.String(50), default=DEFAULT_CABINET, nullable=False, index=True)
     wallet_id = db.Column(db.Integer, db.ForeignKey('wallet.id', ondelete='CASCADE'), nullable=False, index=True)
     currency = db.Column(db.String(10), nullable=False, index=True)  # USDT or TRX
     amount = db.Column(db.Float, nullable=False)
@@ -162,6 +180,7 @@ class Transaction(db.Model):
 
 class Reserve(db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    cabinet = db.Column(db.String(50), default=DEFAULT_CABINET, nullable=False, index=True)
     amount = db.Column(db.Float, nullable=False)
     comment = db.Column(db.String(200), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -263,18 +282,21 @@ def aml_check():
 # API Routes
 @app.route('/api/wallets', methods=['GET'])
 def get_wallets():
+    cabinet = selected_cabinet()
     show_hidden = request.args.get('show_hidden', 'false') == 'true'
     wallet_id = request.args.get('wallet_id', type=int)
     
-    query = Wallet.query
+    query = Wallet.query.filter_by(cabinet=cabinet)
     
     # If specific wallet_id is requested, return it regardless of hidden status
     if wallet_id:
         wallet = Wallet.query.get(wallet_id)
         if wallet:
+            total_query = Wallet.query.filter_by(cabinet=wallet.cabinet, is_hidden=False)
             return jsonify({
                 'wallets': [{
                     'id': wallet.id,
+                    'cabinet': wallet.cabinet,
                     'name': wallet.name,
                     'address': wallet.address,
                     'balance_usdt': wallet.balance_usdt,
@@ -288,8 +310,10 @@ def get_wallets():
                     'sort_order': wallet.sort_order,
                     'color': wallet.color or 'gray'
                 }],
-                'total_usdt': sum(w.balance_usdt for w in Wallet.query.filter_by(is_hidden=False).all()),
-                'total_trx': sum(w.balance_trx for w in Wallet.query.filter_by(is_hidden=False).all())
+                'cabinet': wallet.cabinet,
+                'cabinets': CABINETS,
+                'total_usdt': sum(w.balance_usdt for w in total_query.all()),
+                'total_trx': sum(w.balance_trx for w in total_query.all())
             })
         else:
             return jsonify({'wallets': [], 'total_usdt': 0, 'total_trx': 0}), 404
@@ -298,12 +322,14 @@ def get_wallets():
         query = query.filter_by(is_hidden=False)
     wallets = query.order_by(Wallet.sort_order, Wallet.created_at).all()
     
-    total_usdt = sum(w.balance_usdt for w in Wallet.query.filter_by(is_hidden=False).all())
-    total_trx = sum(w.balance_trx for w in Wallet.query.filter_by(is_hidden=False).all())
+    visible_wallets = Wallet.query.filter_by(cabinet=cabinet, is_hidden=False).all()
+    total_usdt = sum(w.balance_usdt for w in visible_wallets)
+    total_trx = sum(w.balance_trx for w in visible_wallets)
     
     return jsonify({
         'wallets': [{
             'id': w.id,
+            'cabinet': w.cabinet,
             'name': w.name,
             'address': w.address,
             'balance_usdt': w.balance_usdt,
@@ -318,12 +344,15 @@ def get_wallets():
             'sort_order': w.sort_order,
             'color': w.color or 'gray'
         } for w in wallets],
+        'cabinet': cabinet,
+        'cabinets': CABINETS,
         'total_usdt': total_usdt,
         'total_trx': total_trx
     })
 
 @app.route('/api/wallets', methods=['POST'])
 def add_wallet():
+    cabinet = selected_cabinet()
     data = request.json
     name = data.get('name')
     address = data.get('address')
@@ -351,9 +380,10 @@ def add_wallet():
     if Wallet.query.filter_by(address=address).first():
         return jsonify({'error': 'Wallet already exists'}), 400
     
-    max_order = db.session.query(db.func.max(Wallet.sort_order)).scalar() or 0
+    max_order = db.session.query(db.func.max(Wallet.sort_order)).filter(Wallet.cabinet == cabinet).scalar() or 0
     
     wallet = Wallet(
+        cabinet=cabinet,
         name=name,
         address=address,
         color=color,
@@ -364,6 +394,7 @@ def add_wallet():
     
     return jsonify({
         'id': wallet.id,
+        'cabinet': wallet.cabinet,
         'name': wallet.name,
         'address': wallet.address,
         'balance_usdt': wallet.balance_usdt,
@@ -410,11 +441,12 @@ def delete_wallet(wallet_id):
 
 @app.route('/api/wallets/reorder', methods=['POST'])
 def reorder_wallets():
+    cabinet = selected_cabinet()
     data = request.json
     order = data.get('order', [])
     
     for index, wallet_id in enumerate(order):
-        wallet = Wallet.query.get(wallet_id)
+        wallet = Wallet.query.filter_by(id=wallet_id, cabinet=cabinet).first()
         if wallet:
             wallet.sort_order = index
     
@@ -429,7 +461,8 @@ def refresh_balances():
     except RuntimeError as e:
         return jsonify({'error': str(e)}), 500
     
-    wallets = Wallet.query.all()
+    cabinet = selected_cabinet()
+    wallets = Wallet.query.filter_by(cabinet=cabinet).all()
     print(f"Found {len(wallets)} wallets to update")
     updated_count = 0
     errors = []
@@ -574,12 +607,14 @@ def refresh_balances():
     if errors:
         return jsonify({
             'success': True,
+            'cabinet': cabinet,
             'updated': updated_count,
             'errors': errors
         }), 200
     
     return jsonify({
         'success': True,
+        'cabinet': cabinet,
         'updated': updated_count
     })
 
@@ -1063,11 +1098,12 @@ def reset_aml_checking(wallet_id):
 
 @app.route('/api/transactions', methods=['GET'])
 def get_transactions():
+    cabinet = selected_cabinet()
     hide_small = request.args.get('hide_small', 'false') == 'true'
     hide_trx = request.args.get('hide_trx', 'false') == 'true'
     wallet_id = request.args.get('wallet_id', type=int)
     
-    query = Transaction.query.join(Wallet)
+    query = Transaction.query.join(Wallet).filter(Transaction.cabinet == cabinet)
     
     if wallet_id:
         query = query.filter(Transaction.wallet_id == wallet_id)
@@ -1083,6 +1119,7 @@ def get_transactions():
     return jsonify({
         'transactions': [{
             'id': t.id,
+            'cabinet': t.cabinet,
             'wallet_id': t.wallet_id,
             'wallet_name': t.wallet.name,
             'currency': t.currency,
@@ -1097,7 +1134,9 @@ def get_transactions():
             'comment': t.comment,
             'transaction_type': t.transaction_type,
             'created_at': t.created_at.isoformat()
-        } for t in transactions]
+        } for t in transactions],
+        'cabinet': cabinet,
+        'cabinets': CABINETS,
     })
 
 def get_counterparty_name(address):
@@ -1142,7 +1181,8 @@ def refresh_transactions():
     except RuntimeError as e:
         return jsonify({'error': str(e)}), 500
     
-    wallets = Wallet.query.all()
+    cabinet = selected_cabinet()
+    wallets = Wallet.query.filter_by(cabinet=cabinet).all()
     new_count = 0
     errors = []
     
@@ -1156,7 +1196,10 @@ def refresh_transactions():
     # Get ALL existing transaction hashes with wallet_id to avoid duplicates
     # Check by combination of tx_hash + wallet_id to prevent duplicates for the same wallet
     all_existing_tx_keys = set(
-        (tx.tx_hash, tx.wallet_id) for tx in Transaction.query.filter(Transaction.tx_hash.isnot(None)).all()
+        (tx.tx_hash, tx.wallet_id) for tx in Transaction.query.filter(
+            Transaction.cabinet == cabinet,
+            Transaction.tx_hash.isnot(None),
+        ).all()
         if tx.tx_hash
     )
     print(f"Found {len(all_existing_tx_keys)} existing transactions in database")
@@ -1305,6 +1348,7 @@ def refresh_transactions():
                                 
                                 transaction = Transaction(
                                     wallet_id=wallet.id,
+                                    cabinet=wallet.cabinet,
                                     currency='USDT',
                                     amount=display_amount,  # Use approve_amount for approve, regular amount for others
                                     direction=direction,
@@ -1420,6 +1464,7 @@ def refresh_transactions():
                                         
                                         transaction = Transaction(
                                             wallet_id=wallet.id,
+                                            cabinet=wallet.cabinet,
                                             currency='TRX',
                                             amount=amount,
                                             direction=direction,
@@ -1458,6 +1503,7 @@ def refresh_transactions():
                                         
                                         transaction = Transaction(
                                             wallet_id=wallet.id,
+                                            cabinet=wallet.cabinet,
                                             currency='TRX',
                                             amount=amount,
                                             direction='outgoing',
@@ -1493,6 +1539,7 @@ def refresh_transactions():
                                         # Unfreeze doesn't have amount in contract, set to 0 or get from previous freeze
                                         transaction = Transaction(
                                             wallet_id=wallet.id,
+                                            cabinet=wallet.cabinet,
                                             currency='TRX',
                                             amount=0.0,
                                             direction='incoming',
@@ -1527,6 +1574,7 @@ def refresh_transactions():
                                         
                                         transaction = Transaction(
                                             wallet_id=wallet.id,
+                                            cabinet=wallet.cabinet,
                                             currency='TRX',
                                             amount=0.0,
                                             direction='outgoing',
@@ -1561,6 +1609,7 @@ def refresh_transactions():
                                         
                                         transaction = Transaction(
                                             wallet_id=wallet.id,
+                                            cabinet=wallet.cabinet,
                                             currency='TRX',
                                             amount=0.0,
                                             direction='incoming',
@@ -1600,6 +1649,7 @@ def refresh_transactions():
                                         
                                         transaction = Transaction(
                                             wallet_id=wallet.id,
+                                            cabinet=wallet.cabinet,
                                             currency='TRX',
                                             amount=0.0,
                                             direction='outgoing',
@@ -1639,7 +1689,7 @@ def refresh_transactions():
     # Only update transactions that don't have counterparty_name set
     print("\n=== UPDATING EXISTING TRANSACTIONS WITH ADDRESS BOOK ===")
     updated_count = 0
-    existing_usdt_txs = Transaction.query.filter_by(currency='USDT').filter(
+    existing_usdt_txs = Transaction.query.filter_by(cabinet=cabinet, currency='USDT').filter(
         (Transaction.counterparty_name == None) | (Transaction.counterparty_name == '')
     ).all()
     
@@ -1663,6 +1713,7 @@ def refresh_transactions():
     print("\n=== UPDATING EXISTING TRANSACTIONS WITH OWN FUND TRANSFER STATUS ===")
     own_fund_updated_count = 0
     existing_txs = Transaction.query.filter(
+        Transaction.cabinet == cabinet,
         (Transaction.comment != 'Own fund transfer') | (Transaction.comment == None)
     ).filter(
         Transaction.from_address.isnot(None),
@@ -1696,6 +1747,7 @@ def refresh_transactions():
     
     return jsonify({
         'success': True,
+        'cabinet': cabinet,
         'new_transactions': new_count,
         'updated_transactions': updated_count,
         'errors': errors if errors else None
@@ -1704,19 +1756,24 @@ def refresh_transactions():
 # Reserves API
 @app.route('/api/reserves', methods=['GET'])
 def get_reserves():
-    reserves = Reserve.query.order_by(Reserve.created_at.desc()).all()
+    cabinet = selected_cabinet()
+    reserves = Reserve.query.filter_by(cabinet=cabinet).order_by(Reserve.created_at.desc()).all()
     return jsonify({
         'reserves': [{
             'id': r.id,
+            'cabinet': r.cabinet,
             'amount': r.amount,
             'comment': r.comment,
             'created_at': r.created_at.isoformat(),
             'updated_at': r.updated_at.isoformat()
-        } for r in reserves]
+        } for r in reserves],
+        'cabinet': cabinet,
+        'cabinets': CABINETS,
     })
 
 @app.route('/api/reserves', methods=['POST'])
 def create_reserve():
+    cabinet = selected_cabinet()
     data = request.json
     amount = float(data.get('amount', 0))
     comment = data.get('comment', '').strip()
@@ -1724,7 +1781,7 @@ def create_reserve():
     if amount <= 0:
         return jsonify({'error': 'Amount must be greater than 0'}), 400
     
-    reserve = Reserve(amount=amount, comment=comment)
+    reserve = Reserve(cabinet=cabinet, amount=amount, comment=comment)
     db.session.add(reserve)
     db.session.commit()
     
@@ -1732,6 +1789,7 @@ def create_reserve():
         'success': True,
         'reserve': {
             'id': reserve.id,
+            'cabinet': reserve.cabinet,
             'amount': reserve.amount,
             'comment': reserve.comment,
             'created_at': reserve.created_at.isoformat(),
@@ -1741,7 +1799,7 @@ def create_reserve():
 
 @app.route('/api/reserves/<int:reserve_id>', methods=['PUT'])
 def update_reserve(reserve_id):
-    reserve = Reserve.query.get_or_404(reserve_id)
+    reserve = Reserve.query.filter_by(id=reserve_id, cabinet=selected_cabinet()).first_or_404()
     data = request.json
     amount = float(data.get('amount', reserve.amount))
     comment = data.get('comment', reserve.comment).strip()
@@ -1758,6 +1816,7 @@ def update_reserve(reserve_id):
         'success': True,
         'reserve': {
             'id': reserve.id,
+            'cabinet': reserve.cabinet,
             'amount': reserve.amount,
             'comment': reserve.comment,
             'created_at': reserve.created_at.isoformat(),
@@ -1767,15 +1826,16 @@ def update_reserve(reserve_id):
 
 @app.route('/api/reserves/<int:reserve_id>', methods=['DELETE'])
 def delete_reserve(reserve_id):
-    reserve = Reserve.query.get_or_404(reserve_id)
+    reserve = Reserve.query.filter_by(id=reserve_id, cabinet=selected_cabinet()).first_or_404()
     db.session.delete(reserve)
     db.session.commit()
     return jsonify({'success': True})
 
 @app.route('/api/reserves/total', methods=['GET'])
 def get_total_reserves():
-    total = db.session.query(func.sum(Reserve.amount)).scalar() or 0.0
-    return jsonify({'total': round(total, 2)})
+    cabinet = selected_cabinet()
+    total = db.session.query(func.sum(Reserve.amount)).filter(Reserve.cabinet == cabinet).scalar() or 0.0
+    return jsonify({'total': round(total, 2), 'cabinet': cabinet})
 
 # Address Book API
 @app.route('/api/addressbook', methods=['GET'])
@@ -2047,10 +2107,12 @@ def remove_duplicate_transactions():
     from collections import defaultdict
     
     try:
+        cabinet = selected_cabinet()
         # Find duplicates by (tx_hash, wallet_id) combination
         duplicates = defaultdict(list)
         
         all_transactions = Transaction.query.filter(
+            Transaction.cabinet == cabinet,
             Transaction.tx_hash.isnot(None),
             Transaction.tx_hash != ''
         ).all()
@@ -2088,6 +2150,7 @@ def remove_duplicate_transactions():
             db.session.commit()
             return jsonify({
                 'success': True,
+                'cabinet': cabinet,
                 'deleted_count': total_deleted,
                 'duplicate_groups': len(duplicate_groups),
                 'details': deleted_details[:10]  # Return first 10 for display
@@ -2095,6 +2158,7 @@ def remove_duplicate_transactions():
         else:
             return jsonify({
                 'success': True,
+                'cabinet': cabinet,
                 'deleted_count': 0,
                 'duplicate_groups': 0,
                 'message': 'No duplicates found'

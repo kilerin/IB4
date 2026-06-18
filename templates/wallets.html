@@ -34,6 +34,10 @@
         <div class="reserves-separator"></div>
         
         <div class="wallet-controls">
+            <select class="form-input" id="cabinetSelector" title="Cabinet">
+                <option value="main">Main</option>
+                <option value="new">New Cabinet</option>
+            </select>
             <button class="btn btn-sm" onclick="openAddWalletModal()">+ Add Wallet</button>
             <button class="btn btn-sm btn-secondary" id="refreshBalancesBtn" onclick="refreshBalances()">Refresh</button>
             <div id="balancesLoading" class="balances-loading" style="display: none;">

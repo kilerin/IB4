@@ -3,9 +3,10 @@ services:
     build: .
     container_name: ib4deck_telegram_api
     command: >
+      sh -c "alembic upgrade head &&
       gunicorn --bind 0.0.0.0:5002 --workers ${TELEGRAM_API_WORKERS:-3}
       --timeout ${TELEGRAM_API_TIMEOUT:-180}
-      --access-logfile - --error-logfile - telegram_wsgi:app
+      --access-logfile - --error-logfile - telegram_wsgi:app"
     environment:
       - DATABASE_URL=${DATABASE_URL:?DATABASE_URL is required}
       - SECRET_KEY=${SECRET_KEY:?SECRET_KEY is required}
