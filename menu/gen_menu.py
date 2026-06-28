@@ -96,6 +96,9 @@ def img_url(prompt, seed):
     p = urllib.parse.quote(prompt)
     return f"https://image.pollinations.ai/prompt/{p}?width=500&height=360&nologo=true&model=flux&seed={seed}"
 
+import sys
+PDF = "--pdf" in sys.argv
+
 cards = []
 nav = []
 seed = 10
@@ -105,14 +108,17 @@ for title, tr_title, sec_emoji, items in SECTIONS:
     cards.append(f'<section id="{anchor}"><h2><span class="ico">{sec_emoji}</span> {html.escape(title)} <span class="tr">{html.escape(tr_title)}</span></h2><div class="grid">')
     for tr, ru, desc, price, emoji, prompt in items:
         seed += 1
-        url = img_url(prompt, seed)
+        if PDF:
+            # В PDF внешние фото недоступны: показываем крупную emoji-иконку
+            ph = f'<div class="ph"><div class="fallback">{emoji}</div></div>'
+        else:
+            url = img_url(prompt, seed)
+            ph = (f'<div class="ph"><img loading="lazy" src="{url}" alt="{html.escape(ru)}" '
+                  f'''onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">'''
+                  f'<div class="fallback" style="display:none">{emoji}</div></div>')
         cards.append(f'''
         <article class="card">
-          <div class="ph">
-            <img loading="lazy" src="{url}" alt="{html.escape(ru)}"
-                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
-            <div class="fallback" style="display:none">{emoji}</div>
-          </div>
+          {ph}
           <div class="body">
             <div class="row"><h3>{html.escape(ru)}</h3><span class="price">{price} ₺</span></div>
             <div class="orig">{html.escape(tr)}</div>
@@ -120,6 +126,27 @@ for title, tr_title, sec_emoji, items in SECTIONS:
           </div>
         </article>''')
     cards.append('</div></section>')
+
+if PDF:
+    nav_block = ""
+    extra_css = """
+  html,body{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  *{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  .ph{aspect-ratio:auto !important;height:78px;}
+  .fallback{display:flex !important;position:static;height:100%;font-size:46px;}
+  .card{break-inside:avoid;}
+  section{break-inside:auto;margin-top:22px;}
+  h2{break-after:avoid;font-size:22px;}
+  .card:hover{transform:none;box-shadow:none;border-color:var(--line);}
+  .grid{grid-template-columns:repeat(3,1fr);gap:11px;margin-top:14px;}
+  .body{padding:10px 12px 12px;}
+  h3{font-size:15px;}
+  main{padding-top:10px;}
+  @page{size:A4;margin:11mm 9mm;}
+"""
+else:
+    nav_block = "<nav>" + ''.join(nav) + "</nav>"
+    extra_css = ""
 
 HTML = f'''<!DOCTYPE html>
 <html lang="ru">
@@ -161,6 +188,7 @@ HTML = f'''<!DOCTYPE html>
   .desc{{margin:4px 0 0;font-size:13px;color:#cdbfa9;line-height:1.45;}}
   footer{{text-align:center;padding:30px 20px;color:var(--muted);font-size:13px;border-top:1px solid var(--line);}}
   @media(max-width:480px){{header.top .brand{{font-size:34px;}} .grid{{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;}}}}
+{extra_css}
 </style>
 </head>
 <body>
@@ -169,7 +197,7 @@ HTML = f'''<!DOCTYPE html>
   <div class="sub">meyhane</div>
   <div class="ru">Турецкая мейхане · Меню на русском языке</div>
 </header>
-<nav>{''.join(nav)}</nav>
+{nav_block}
 <main>
 {''.join(cards)}
 </main>
@@ -181,7 +209,8 @@ HTML = f'''<!DOCTYPE html>
 </html>'''
 
 import os
-out = os.path.join(os.path.dirname(__file__), "russian-menu.html")
+fname = "russian-menu-print.html" if PDF else "russian-menu.html"
+out = os.path.join(os.path.dirname(__file__), fname)
 with open(out, "w", encoding="utf-8") as f:
     f.write(HTML)
 n = sum(len(s[3]) for s in SECTIONS)
