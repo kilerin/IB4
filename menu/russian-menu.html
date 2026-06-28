@@ -1,0 +1,910 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rahat Meyhane — Меню</title>
+<style>
+  :root{--bg:#1a1410;--card:#241c16;--gold:#d9a441;--cream:#f3e9d8;--muted:#b9a890;--line:#3a2e23;}
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--cream);}
+  header.top{text-align:center;padding:42px 20px 26px;background:radial-gradient(circle at 50% 0%,#2c2118,#1a1410);border-bottom:2px solid var(--gold);}
+  header.top .brand{font-size:46px;font-weight:800;letter-spacing:4px;color:var(--gold);}
+  header.top .sub{font-size:16px;letter-spacing:8px;text-transform:uppercase;color:var(--muted);margin-top:6px;}
+  header.top .ru{margin-top:14px;font-size:15px;color:var(--cream);opacity:.85;}
+  nav{position:sticky;top:0;z-index:5;display:flex;flex-wrap:wrap;gap:6px;justify-content:center;
+       padding:12px;background:rgba(26,20,16,.96);border-bottom:1px solid var(--line);backdrop-filter:blur(6px);}
+  nav a{color:var(--cream);text-decoration:none;font-size:13px;padding:6px 12px;border:1px solid var(--line);
+        border-radius:20px;transition:.2s;}
+  nav a:hover{background:var(--gold);color:#1a1410;border-color:var(--gold);}
+  main{max-width:1180px;margin:0 auto;padding:24px 16px 60px;}
+  section{margin-top:40px;}
+  h2{font-size:26px;color:var(--gold);border-bottom:1px solid var(--line);padding-bottom:10px;
+      display:flex;align-items:center;gap:10px;}
+  h2 .ico{font-size:24px;}
+  h2 .tr{font-size:13px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-left:auto;}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:18px;margin-top:20px;}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden;
+         display:flex;flex-direction:column;transition:transform .18s,box-shadow .18s;}
+  .card:hover{transform:translateY(-4px);box-shadow:0 10px 28px rgba(0,0,0,.45);border-color:var(--gold);}
+  .ph{position:relative;width:100%;aspect-ratio:5/3.6;background:#2e231b;}
+  .ph img{width:100%;height:100%;object-fit:cover;display:block;}
+  .fallback{position:absolute;inset:0;align-items:center;justify-content:center;font-size:74px;background:linear-gradient(135deg,#2e231b,#241c16);}
+  .body{padding:14px 15px 16px;display:flex;flex-direction:column;gap:6px;flex:1;}
+  .row{display:flex;justify-content:space-between;align-items:baseline;gap:8px;}
+  h3{margin:0;font-size:17px;color:var(--cream);}
+  .price{color:var(--gold);font-weight:700;font-size:16px;white-space:nowrap;}
+  .orig{font-size:12px;color:var(--muted);font-style:italic;letter-spacing:.3px;}
+  .desc{margin:4px 0 0;font-size:13px;color:#cdbfa9;line-height:1.45;}
+  footer{text-align:center;padding:30px 20px;color:var(--muted);font-size:13px;border-top:1px solid var(--line);}
+  @media(max-width:480px){header.top .brand{font-size:34px;} .grid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;}}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand">RAHAT</div>
+  <div class="sub">meyhane</div>
+  <div class="ru">Турецкая мейхане · Меню на русском языке</div>
+</header>
+<nav><a href="#sec0">🫒 Мезе</a><a href="#sec1">🍳 Горячие закуски</a><a href="#sec2">🦐 Морепродукты</a><a href="#sec3">🍖 Основные блюда</a><a href="#sec4">🔥 Субпродукты</a><a href="#sec5">🔥 Гриль и мангал</a><a href="#sec6">🥗 Салаты</a><a href="#sec7">🍮 Десерты</a></nav>
+<main>
+<section id="sec0"><h2><span class="ico">🫒</span> Мезе <span class="tr">MEZELER</span></h2><div class="grid">
+        <article class="card">
+          <div class="ph">
+            <img loading="lazy" src="https://image.pollinations.ai/prompt/turkish%20cheese%20plate%20assortment%2C%20restaurant%20food%20photography?width=500&height=360&nologo=true&model=flux&seed=11" alt="Сырная тарелка"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="fallback" style="display:none">🧀</div>
+          </div>
+          <div class="body">
+            <div class="row"><h3>Сырная тарелка</h3><span class="price">240 ₺</span></div>
+            <div class="orig">Peynir Tabağı</div>
+            <p class="desc">Ассорти турецких сыров</p>
+          </div>
+        </article>
+        <article class="card">
+          <div class="ph">
+            <img loading="lazy" src="https://image.pollinations.ai/prompt/arnavut%20cigeri%20fried%20liver%20cubes%20with%20onions%2C%20turkish%20meze?width=500&height=360&nologo=true&model=flux&seed=12" alt="Печень по-албански"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="fallback" style="display:none">🍖</div>
+          </div>
+          <div class="body">
+            <div class="row"><h3>Печень по-албански</h3><span class="price">440 ₺</span></div>
+            <div class="orig">Arnavut Ciğeri</div>
+            <p class="desc">Обжаренные кусочки печени с луком</p>
+          </div>
+        </article>
+        <article class="card">
+          <div class="ph">
+            <img loading="lazy" src="https://image.pollinations.ai/prompt/boiled%20lamb%20brain%20salad%20with%20lemon%20and%20parsley%2C%20turkish%20meze?width=500&height=360&nologo=true&model=flux&seed=13" alt="Бараньи мозги"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="fallback" style="display:none">🍲</div>
+          </div>
+          <div class="body">
+            <div class="row"><h3>Бараньи мозги</h3><span class="price">540 ₺</span></div>
+            <div class="orig">Beyin Söğüş</div>
+            <p class="desc">Отварные мозги с зеленью и лимоном</p>
+          </div>
+        </article>
+        <article class="card">
+          <div class="ph">
+            <img loading="lazy" src="https://image.pollinations.ai/prompt/atom%20spicy%20yogurt%20with%20chili%20oil%2C%20turkish%20meze?width=500&height=360&nologo=true&model=flux&seed=14" alt="Атом"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="fallback" style="display:none">🌶️</div>
+          </div>
+          <div class="body">
+            <div class="row"><h3>Атом</h3><span class="price">240 ₺</span></div>
+            <div class="orig">Atom</div>
+            <p class="desc">Острый йогурт с перцем чили и маслом</p>
+          </div>
+        </article>
+        <article class="card">
+          <div class="ph">
+            <img loading="lazy" src="https://image.pollinations.ai/prompt/girit%20ezme%20cretan%20cheese%20herb%20dip%2C%20turkish%20meze?width=500&height=360&nologo=true&model=flux&seed=15" alt="Критская паста"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="fallback" style="display:none">🥗</div>
+          </div>
+          <div class="body">
+            <div class="row"><h3>Критская паста</h3><span class="price">320 ₺</span></div>
+            <div class="orig">Girit Ezme</div>
+            <p class="desc">Паста из сыра с зеленью</p>
+          </div>
+        </article>
+        <article class="card">
+          <div class="ph">
+            <img loading="lazy" src="https://image.pollinations.ai/prompt/turkish%20saksuka%20fried%20eggplant%20in%20tomato%20sauce?width=500&height=360&nologo=true&model=flux&seed=16" alt="Шакшука"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="fallback" style="display:none">🍆</div>
+          </div>
+          <div class="body">
+            <div class="row"><h3>Шакшука</h3><span class="price">360 ₺</span></div>
+            <div class="orig">Şakşuka</div>
+            <p class="desc">Жареные баклажаны в томатном соусе</p>
+          </div>
+        </article>
+        <article class="card">
+          <div class="ph">
+            <img loading="lazy" src="https://image.pollinations.ai/prompt/kopoglu%20fried%20eggplant%20with%20yogurt%20and%20tomato%20sauce?width=500&height=360&nologo=true&model=flux&seed=17" alt="Кёпоглу"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="fallback" style="display:none">🍆</div>
+          </div>
+          <div class="body">
+            <div class="row"><h3>Кёпоглу</h3><span class="price">360 ₺</span></div>
+            <div class="orig">Köpoğlu</div>
+            <p class="desc">Жареные баклажаны с йогуртом и томатом</p>
+          </div>
+        </article>
+        <article class="card">
+          <div class="ph">
+            <img loading="lazy" src="https://image.pollinations.ai/prompt/smoked%20eggplant%20salad%20puree%2C%20turkish%20meze?width=500&height=360&nologo=true&model=flux&seed=18" alt="Баклажанная икра"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="fallback" style="display:none">🍆</div>
+          </div>
+          <div class="body">
+            <div class="row"><h3>Баклажанная икра</h3><span class="price">240 ₺</span></div>
+            <div class="orig">Patlıcan Salatası</div>
+            <p class="desc">Салат из печёных баклажанов</p>
+          </div>
+        </article>
+        <article class="card">
+          <div class="ph">
+            <img loading="lazy" src="https://image.pollinations.ai/prompt/purslane%20with%20garlic%20yogurt%2C%20turkish%20meze?width=500&height=360&nologo=true&model=flux&seed=19" alt="Портулак в йогурте"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="fallback" style="display:none">🥬</div>
+          </div>
+          <div class="body">
+            <div class="row"><h3>Портулак в йогурте</h3><span class="price">170 ₺</span></div>
+            <div class="orig">Yoğurtlu Semiz</div>
+            <p class="desc">Зелень портулака с чесночным йогуртом</p>
+          </div>
+        </article>
+        <article class="card">
+          <div class="ph">
+            <img loading="lazy" src="https://image.pollinations.ai/prompt/thick%20cacik%20yogurt%20cucumber%20garlic%20dip?width=500&height=360&nologo=true&model=flux&seed=20" alt="Сухой джаджик"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="fallback" style="display:none">🥒</div>
+          </div>
+          <div class="body">
+            <div class="row"><h3>Сухой джаджик</h3><span class="price">320 ₺</span></div>
+            <div class="orig">Kuru Cacık</div>
+            <p class="desc">Густой йогурт с огурцом и чесноком</p>
+          </div>
+        </article>
+        <article class="card">
+          <div class="ph">
+            <img loading="lazy" src="https://image.pollinations.ai/prompt/mutabbal%20baba%20ganoush%20eggplant%20tahini%20dip?width=500&height=360&nologo=true&model=flux&seed=21" alt="Мутаббаль"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="fallback" style="display:none">🍆</div>
+          </div>
+          <div class="body">
+            <div class="row"><h3>Мутаббаль</h3><span class="price">290 ₺</span></div>
+            <div class="orig">Mütebbel</div>
+            <p class="desc">Паста из печёных баклажанов с тахини</p>
+          </div>
+        </article>
+        <article class="card">
+          <div class="ph">
+            <img loading="lazy" src="https://image.pollinations.ai/prompt/carrot%20tarator%20yogurt%20dip%2C%20turkish%20meze?width=500&height=360&nologo=true&model=flux&seed=22" alt="Морковный таратор"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="fallback" style="display:none">🥕</div>
+          </div>
+          <div class="body">
+            <div class="row"><h3>Морковный таратор</h3><span class="price">290 ₺</span></div>
+            <div class="orig">Havuç Tarator</div>
+            <p class="desc">Тёртая морковь с йогуртом</p>
+          </div>
+        </article>
+        <article class="card">
+          <div class="ph">
+            <img loading="lazy" src="https://image.pollinations.ai/prompt/sea%20beans%20samphire%20with%20olive%20oil%20lemon%2C%20turkish%20meze?width=500&height=360&nologo=true&model=flux&seed=23" alt="Морская фасоль"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="fallback" style="display:none">🌿</div>
+          </div>
+          <div class="body">
+            <div class="row"><h3>Морская фасоль</h3><span class="price">310 ₺</span></div>
+            <div class="orig">Deniz Börülcesi</div>
+            <p class="desc">Солерос с оливковым маслом и лимоном</p>
+          </div>
+        </article>
+        <article class="card">
+          <div class="ph">
+            <img loading="lazy" src="https://image.pollinations.ai/prompt/barbunya%20pilaki%20stewed%20beans%20in%20olive%20oil?width=500&height=360&nologo=true&model=flux&seed=24" alt="Фасоль пиляки"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="fallback" style="display:none">🫘</div>
+          </div>
+          <div class="body">
+            <div class="row"><h3>Фасоль пиляки</h3><span class="price">310 ₺</span></div>
+            <div class="orig">Barbunya Pilaki</div>
+            <p class="desc">Тушёная фасоль в оливковом масле</p>
+          </div>
+        </article>
+        <article class="card">
+          <div class="ph">
+            <img loading="lazy" src="https://image.pollinations.ai/prompt/fava%20bean%20puree%20with%20onion%20and%20dill%2C%20turkish%20meze?width=500&height=360&nologo=true&model=flux&seed=25" alt="Фава"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="fallback" style="display:none">🫛</div>
+          </div>
+          <div class="body">
+            <div class="row"><h3>Фава</h3><span class="price">410 ₺</span></div>
+            <div class="orig">Fava</div>
+            <p class="desc">Пюре из жёлтых бобов с луком</p>
+          </div>
+        </article>
+        <article class="card">
+          <div class="ph">
+            <img loading="lazy" src="https://image.pollinations.ai/prompt/hummus%20chickpea%20dip%20with%20olive%20oil?width=500&height=360&nologo=true&model=flux&seed=26" alt="Хумус"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="fallback" style="display:none">🧆</div>
+          </div>
+          <div class="body">
+            <div class="row"><h3>Хумус</h3><span class="price">410 ₺</span></div>
+            <div class="orig">Humus</div>
+            <p class="desc">Паста из нута с тахини</p>
+          </div>
+        </article>
+        <article class="card">
+          <div class="ph">
+            <img loading="lazy" src="https://image.pollinations.ai/prompt/warm%20hummus%20topped%20with%20pastirma%20cured%20beef?width=500&height=360&nologo=true&model=flux&seed=27" alt="Хумус с пастырмой"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="fallback" style="display:none">🧆</div>
+          </div>
+          <div class="body">
+            <div class="row"><h3>Хумус с пастырмой</h3><span class="price">390 ₺</span></div>
+            <div class="orig">Pastırmalı Humus</div>
+            <p class="desc">Тёплый хумус с вяленым мясом</p>
+          </div>
+        </article>
+        <article class="card">
+          <div class="ph">
+            <img loading="lazy" src="https://image.pollinations.ai/prompt/artichoke%20hearts%20in%20olive%20oil%20clay%20pot%2C%20turkish%20meze?width=500&height=360&nologo=true&model=flux&seed=28" alt="Артишоки в горшочке"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="fallback" style="display:none">🌱</div>
+          </div>
+          <div class="body">
+            <div class="row"><h3>Артишоки в горшочке</h3><span class="price">510 ₺</span></div>
+            <div class="orig">Çanak Enginar</div>
+            <p class="desc">Артишоки в оливковом масле</p>
+          </div>
+        </article>
+        <article class="card">
+          <div class="ph">
+            <img loading="lazy" src="https://image.pollinations.ai/prompt/cracked%20green%20olives%20with%20walnut%20pomegranate%2C%20turkish%20meze?width=500&height=360&nologo=true&model=flux&seed=29" alt="Дроблёные зелёные оливки"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="fallback" style="display:none">🫒</div>
+          </div>
+          <div class="body">
+            <div class="row"><h3>Дроблёные зелёные оливки</h3><span class="price">310 ₺</span></div>
+            <div class="orig">Kırma Yeşil Zeytin</div>
+            <p class="desc">Оливки с грецким орехом и гранатом</p>
+          </div>
+        </article>
+        <article class="card">
+          <div class="ph">
+            <img loading="lazy" src="https://image.pollinations.ai/prompt/sauteed%20wild%20greens%20with%20garlic%2C%20turkish%20meze?width=500&height=360&nologo=true&model=flux&seed=30" alt="Тёплая зелень"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="fallback" style="display:none">🌿</div>
+          </div>
+          <div class="body">
+            <div class="row"><h3>Тёплая зелень</h3><span class="price">290 ₺</span></div>
+            <div class="orig">Sıcak Ot</div>
+            <p class="desc">Сезонные травы, обжаренные с чесноком</p>
+          </div>
+        </article>
+        <article class="card">
+          <div class="ph">
+            <img loading="lazy" src="https://image.pollinations.ai/prompt/zucchini%20fritters%20mucver%20with%20herbs%2C%20turkish%20food?width=500&height=360&nologo=true&model=flux&seed=31" alt="Оладьи из кабачков"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="fallback" style="display:none">🥒</div>
+          </div>
+          <div class="body">
+            <div class="row"><h3>Оладьи из кабачков</h3><span class="price">260 ₺</span></div>
+            <div class="orig">Kabak Mücver</div>
+            <p class="desc">Хрустящие оладьи с зеленью</p>
+          </div>
+        </article>
+        <article class="card">
+          <div class="ph">
+            <img loading="lazy" src="https://image.pollinations.ai/prompt/quince%20yogurt%20dip%2C%20turkish%20meze?width=500&height=360&nologo=true&model=flux&seed=32" alt="Джаджик с айвой"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="fallback" style="display:none">🍐</div>
+          </div>
+          <div class="body">
+            <div class="row"><h3>Джаджик с айвой</h3><span class="price">340 ₺</span></div>
+            <div class="orig">Ayva Cacık</div>
+            <p class="desc">Йогурт с айвой</p>
+          </div>
+        </article>
+        <article class="card">
+          <div class="ph">
+            <img loading="lazy" src="https://image.pollinations.ai/prompt/piyaz%20white%20bean%20salad%20with%20onion%20egg%20tomato?width=500&height=360&nologo=true&model=flux&seed=33" alt="Пияз"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="fallback" style="display:none">🫘</div>
+          </div>
+          <div class="body">
+            <div class="row"><h3>Пияз</h3><span class="price">290 ₺</span></div>
+            <div class="orig">Piyaz</div>
+            <p class="desc">Салат из белой фасоли с луком</p>
+          </div>
+        </article>
+        <article class="card">
+          <div class="ph">
+            <img loading="lazy" src="https://image.pollinations.ai/prompt/stuffed%20zucchini%20turkish%20style%20dish?width=500&height=360&nologo=true&model=flux&seed=34" alt="Кабачки шаян"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="fallback" style="display:none">🥒</div>
+          </div>
+          <div class="body">
+            <div class="row"><h3>Кабачки шаян</h3><span class="price">340 ₺</span></div>
+            <div class="orig">Kabak Şayan</div>
+            <p class="desc">Кабачки в особом соусе</p>
+          </div>
+        </article>
+        <article class="card">
+          <div class="ph">
+            <img loading="lazy" src="https://image.pollinations.ai/prompt/russian%20salad%20olivier%20with%20mayonnaise?width=500&height=360&nologo=true&model=flux&seed=35" alt="Салат Оливье"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="fallback" style="display:none">🥗</div>
+          </div>
+          <div class="body">
+            <div class="row"><h3>Салат Оливье</h3><span class="price">240 ₺</span></div>
+            <div class="orig">Rus Salatası</div>
+            <p class="desc">Классический салат с майонезом</p>
+          </div>
+        </article>
+        <article class="card">
+          <div class="ph">
+            <img loading="lazy" src="https://image.pollinations.ai/prompt/acili%20ezme%20spicy%20tomato%20pepper%20dip%2C%20turkish%20meze?width=500&height=360&nologo=true&model=flux&seed=36" alt="Острая паста аджылы эзме"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="fallback" style="display:none">🌶️</div>
+          </div>
+          <div class="body">
+            <div class="row"><h3>Острая паста аджылы эзме</h3><span class="price">240 ₺</span></div>
+            <div class="orig">Acılı Ezme</div>
+            <p class="desc">Перетёртые томаты и перец с зеленью</p>
+          </div>
+        </article>
+        <article class="card">
+          <div class="ph">
+            <img loading="lazy" src="https://image.pollinations.ai/prompt/haydari%20thick%20strained%20yogurt%20dip%20with%20herbs?width=500&height=360&nologo=true&model=flux&seed=37" alt="Хайдари"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="fallback" style="display:none">🥣</div>
+          </div>
+          <div class="body">
+            <div class="row"><h3>Хайдари</h3><span class="price">230 ₺</span></div>
+            <div class="orig">Haydari</div>
+            <p class="desc">Густой йогурт с чесноком и мятой</p>
+          </div>
+        </article></div></section><section id="sec1"><h2><span class="ico">🍳</span> Горячие закуски <span class="tr">ARA SICAKLAR</span></h2><div class="grid">
+        <article class="card">
+          <div class="ph">
+            <img loading="lazy" src="https://image.pollinations.ai/prompt/turkish%20sogus%20cold%20cut%20appetizer%20plate?width=500&height=360&nologo=true&model=flux&seed=38" alt="Тарелка сёгюш"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="fallback" style="display:none">🍽️</div>
+          </div>
+          <div class="body">
+            <div class="row"><h3>Тарелка сёгюш</h3><span class="price">340 ₺</span></div>
+            <div class="orig">Söğüş Tabağı</div>
+            <p class="desc">Ассорти из холодных субпродуктов</p>
+          </div>
+        </article>
+        <article class="card">
+          <div class="ph">
+            <img loading="lazy" src="https://image.pollinations.ai/prompt/oyster%20mushrooms%20sauteed%20in%20butter%2C%20turkish%20food?width=500&height=360&nologo=true&model=flux&seed=39" alt="Вёшенки на сливочном масле"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="fallback" style="display:none">🍄</div>
+          </div>
+          <div class="body">
+            <div class="row"><h3>Вёшенки на сливочном масле</h3><span class="price">340 ₺</span></div>
+            <div class="orig">Tereyağlı İstiridye Mantarı</div>
+            <p class="desc">Грибы вёшенки, жаренные на масле</p>
+          </div>
+        </article>
+        <article class="card">
+          <div class="ph">
+            <img loading="lazy" src="https://image.pollinations.ai/prompt/mushrooms%20baked%20with%20kasar%20cheese%2C%20turkish%20food?width=500&height=360&nologo=true&model=flux&seed=40" alt="Грибы с сыром кашар"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="fallback" style="display:none">🍄</div>
+          </div>
+          <div class="body">
+            <div class="row"><h3>Грибы с сыром кашар</h3><span class="price">450 ₺</span></div>
+            <div class="orig">Kaşarlı Mantar</div>
+            <p class="desc">Грибы, запечённые с сыром</p>
+          </div>
+        </article>
+        <article class="card">
+          <div class="ph">
+            <img loading="lazy" src="https://image.pollinations.ai/prompt/pacanga%20boregi%20crispy%20rolls%20with%20pastirma%20and%20cheese?width=500&height=360&nologo=true&model=flux&seed=41" alt="Бёрек пачанга"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="fallback" style="display:none">🥟</div>
+          </div>
+          <div class="body">
+            <div class="row"><h3>Бёрек пачанга</h3><span class="price">300 ₺</span></div>
+            <div class="orig">Paçanga Böreği</div>
+            <p class="desc">Хрустящий рулет с пастырмой и сыром</p>
+          </div>
+        </article>
+        <article class="card">
+          <div class="ph">
+            <img loading="lazy" src="https://image.pollinations.ai/prompt/golden%20french%20fries%2C%20restaurant?width=500&height=360&nologo=true&model=flux&seed=42" alt="Картофель фри"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="fallback" style="display:none">🍟</div>
+          </div>
+          <div class="body">
+            <div class="row"><h3>Картофель фри</h3><span class="price">260 ₺</span></div>
+            <div class="orig">Patates Kızartması</div>
+            <p class="desc">Хрустящий жареный картофель</p>
+          </div>
+        </article>
+        <article class="card">
+          <div class="ph">
+            <img loading="lazy" src="https://image.pollinations.ai/prompt/yogurtlama%20meat%20with%20yogurt%20and%20tomato%20sauce%20on%20pita?width=500&height=360&nologo=true&model=flux&seed=43" alt="Йогуртлама"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="fallback" style="display:none">🍲</div>
+          </div>
+          <div class="body">
+            <div class="row"><h3>Йогуртлама</h3><span class="price">480 ₺</span></div>
+            <div class="orig">Yoğurtlama</div>
+            <p class="desc">Мясо с томатным соусом и йогуртом на лаваше</p>
+          </div>
+        </article>
+        <article class="card">
+          <div class="ph">
+            <img loading="lazy" src="https://image.pollinations.ai/prompt/saganaki%20fried%20greek%20cheese?width=500&height=360&nologo=true&model=flux&seed=44" alt="Саганаки"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="fallback" style="display:none">🧀</div>
+          </div>
+          <div class="body">
+            <div class="row"><h3>Саганаки</h3><span class="price">350 ₺</span></div>
+            <div class="orig">Saganaki</div>
+            <p class="desc">Жареный сыр по-гречески</p>
+          </div>
+        </article></div></section><section id="sec2"><h2><span class="ico">🦐</span> Морепродукты <span class="tr">DENİZ ÜRÜNLERİ</span></h2><div class="grid">
+        <article class="card">
+          <div class="ph">
+            <img loading="lazy" src="https://image.pollinations.ai/prompt/shrimp%20casserole%20karides%20guvec%20in%20tomato%20sauce%2C%20turkish?width=500&height=360&nologo=true&model=flux&seed=45" alt="Креветки на сковороде"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="fallback" style="display:none">🦐</div>
+          </div>
+          <div class="body">
+            <div class="row"><h3>Креветки на сковороде</h3><span class="price">900 ₺</span></div>
+            <div class="orig">Karides Tava</div>
+            <p class="desc">Креветки в томатно-чесночном соусе</p>
+          </div>
+        </article>
+        <article class="card">
+          <div class="ph">
+            <img loading="lazy" src="https://image.pollinations.ai/prompt/fried%20calamari%20rings%20with%20sauce?width=500&height=360&nologo=true&model=flux&seed=46" alt="Жареные кальмары"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="fallback" style="display:none">🦑</div>
+          </div>
+          <div class="body">
+            <div class="row"><h3>Жареные кальмары</h3><span class="price">1100 ₺</span></div>
+            <div class="orig">Kalamar Tava</div>
+            <p class="desc">Кальмары в кляре с соусом</p>
+          </div>
+        </article>
+        <article class="card">
+          <div class="ph">
+            <img loading="lazy" src="https://image.pollinations.ai/prompt/grilled%20jumbo%20shrimp%20prawns%20on%20plate?width=500&height=360&nologo=true&model=flux&seed=47" alt="Креветки джамбо гриль"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="fallback" style="display:none">🦐</div>
+          </div>
+          <div class="body">
+            <div class="row"><h3>Креветки джамбо гриль</h3><span class="price">1100 ₺</span></div>
+            <div class="orig">Jumbo Karides Izgara</div>
+            <p class="desc">Крупные креветки на гриле</p>
+          </div>
+        </article></div></section><section id="sec3"><h2><span class="ico">🍖</span> Основные блюда <span class="tr">ANA YEMEK</span></h2><div class="grid">
+        <article class="card">
+          <div class="ph">
+            <img loading="lazy" src="https://image.pollinations.ai/prompt/cokertme%20kebab%20beef%20with%20shoestring%20potatoes%20yogurt%20tomato%20sauce?width=500&height=360&nologo=true&model=flux&seed=48" alt="Кебаб чёкертме"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="fallback" style="display:none">🥙</div>
+          </div>
+          <div class="body">
+            <div class="row"><h3>Кебаб чёкертме</h3><span class="price">1390 ₺</span></div>
+            <div class="orig">Çökertme Kebabı</div>
+            <p class="desc">Тонкая говядина с картофелем-соломкой и йогуртом</p>
+          </div>
+        </article>
+        <article class="card">
+          <div class="ph">
+            <img loading="lazy" src="https://image.pollinations.ai/prompt/tender%20grilled%20beef%20tenderloin%20cubes%20lokum%20kebab?width=500&height=360&nologo=true&model=flux&seed=49" alt="Локум (кебаб)"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="fallback" style="display:none">🥩</div>
+          </div>
+          <div class="body">
+            <div class="row"><h3>Локум (кебаб)</h3><span class="price">1180 ₺</span></div>
+            <div class="orig">Lokum</div>
+            <p class="desc">Нежная мраморная говядина на гриле</p>
+          </div>
+        </article>
+        <article class="card">
+          <div class="ph">
+            <img loading="lazy" src="https://image.pollinations.ai/prompt/sac%20kavurma%20sauteed%20meat%20with%20vegetables%20on%20iron%20plate?width=500&height=360&nologo=true&model=flux&seed=50" alt="Сач кавурма"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="fallback" style="display:none">🍳</div>
+          </div>
+          <div class="body">
+            <div class="row"><h3>Сач кавурма</h3><span class="price">1350 ₺</span></div>
+            <div class="orig">Saç Kavurma</div>
+            <p class="desc">Мясо, жаренное на садже с овощами</p>
+          </div>
+        </article>
+        <article class="card">
+          <div class="ph">
+            <img loading="lazy" src="https://image.pollinations.ai/prompt/kofte%20meatballs%20on%20hunkar%20begendi%20eggplant%20puree?width=500&height=360&nologo=true&model=flux&seed=51" alt="Кёфте на пюре из баклажанов"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="fallback" style="display:none">🍖</div>
+          </div>
+          <div class="body">
+            <div class="row"><h3>Кёфте на пюре из баклажанов</h3><span class="price">1100 ₺</span></div>
+            <div class="orig">Beğendi Yatağında Rahat Köfte</div>
+            <p class="desc">Котлеты на нежном баклажанном пюре</p>
+          </div>
+        </article>
+        <article class="card">
+          <div class="ph">
+            <img loading="lazy" src="https://image.pollinations.ai/prompt/vegetable%20guvec%20stew%20clay%20pot%2C%20turkish%20vegan?width=500&height=360&nologo=true&model=flux&seed=52" alt="Веган гювеч"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="fallback" style="display:none">🥘</div>
+          </div>
+          <div class="body">
+            <div class="row"><h3>Веган гювеч</h3><span class="price">800 ₺</span></div>
+            <div class="orig">Vegan Güveç</div>
+            <p class="desc">Овощное рагу в горшочке</p>
+          </div>
+        </article></div></section><section id="sec4"><h2><span class="ico">🔥</span> Субпродукты <span class="tr">SAKATAT</span></h2><div class="grid">
+        <article class="card">
+          <div class="ph">
+            <img loading="lazy" src="https://image.pollinations.ai/prompt/kokorec%20grilled%20offal%20with%20spicy%20sauce%2C%20turkish%20street%20food?width=500&height=360&nologo=true&model=flux&seed=53" alt="Кокореч атом"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="fallback" style="display:none">🌭</div>
+          </div>
+          <div class="body">
+            <div class="row"><h3>Кокореч атом</h3><span class="price">1100 ₺</span></div>
+            <div class="orig">Atom Kokoreç</div>
+            <p class="desc">Кокореч с острым соусом</p>
+          </div>
+        </article>
+        <article class="card">
+          <div class="ph">
+            <img loading="lazy" src="https://image.pollinations.ai/prompt/grilled%20lamb%20kidneys%20skewers?width=500&height=360&nologo=true&model=flux&seed=54" alt="Бараньи почки"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="fallback" style="display:none">🍢</div>
+          </div>
+          <div class="body">
+            <div class="row"><h3>Бараньи почки</h3><span class="price">900 ₺</span></div>
+            <div class="orig">Kuzu Böbrek</div>
+            <p class="desc">Почки на гриле</p>
+          </div>
+        </article>
+        <article class="card">
+          <div class="ph">
+            <img loading="lazy" src="https://image.pollinations.ai/prompt/sliced%20beef%20tongue%20dish?width=500&height=360&nologo=true&model=flux&seed=55" alt="Язык локум"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="fallback" style="display:none">🍖</div>
+          </div>
+          <div class="body">
+            <div class="row"><h3>Язык локум</h3><span class="price">900 ₺</span></div>
+            <div class="orig">Dil Lokum</div>
+            <p class="desc">Нежный говяжий язык</p>
+          </div>
+        </article>
+        <article class="card">
+          <div class="ph">
+            <img loading="lazy" src="https://image.pollinations.ai/prompt/cold%20boiled%20beef%20tongue%20slices%20with%20greens?width=500&height=360&nologo=true&model=flux&seed=56" alt="Язык холодный"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="fallback" style="display:none">🍖</div>
+          </div>
+          <div class="body">
+            <div class="row"><h3>Язык холодный</h3><span class="price">760 ₺</span></div>
+            <div class="orig">Dil Söğüş</div>
+            <p class="desc">Отварной язык с зеленью</p>
+          </div>
+        </article>
+        <article class="card">
+          <div class="ph">
+            <img loading="lazy" src="https://image.pollinations.ai/prompt/grilled%20beef%20tongue%20slices?width=500&height=360&nologo=true&model=flux&seed=57" alt="Язык на гриле"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="fallback" style="display:none">🔥</div>
+          </div>
+          <div class="body">
+            <div class="row"><h3>Язык на гриле</h3><span class="price">900 ₺</span></div>
+            <div class="orig">Dil Izgara</div>
+            <p class="desc">Говяжий язык на гриле</p>
+          </div>
+        </article>
+        <article class="card">
+          <div class="ph">
+            <img loading="lazy" src="https://image.pollinations.ai/prompt/yaprak%20ciger%20thinly%20sliced%20fried%20liver%2C%20turkish?width=500&height=360&nologo=true&model=flux&seed=58" alt="Печень тонкими ломтиками"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="fallback" style="display:none">🍖</div>
+          </div>
+          <div class="body">
+            <div class="row"><h3>Печень тонкими ломтиками</h3><span class="price">1100 ₺</span></div>
+            <div class="orig">Yaprak Ciğer</div>
+            <p class="desc">Хрустящая жареная печень</p>
+          </div>
+        </article>
+        <article class="card">
+          <div class="ph">
+            <img loading="lazy" src="https://image.pollinations.ai/prompt/grilled%20sweetbreads%20uykuluk%2C%20turkish?width=500&height=360&nologo=true&model=flux&seed=59" alt="Зобная железа"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="fallback" style="display:none">🔥</div>
+          </div>
+          <div class="body">
+            <div class="row"><h3>Зобная железа</h3><span class="price">900 ₺</span></div>
+            <div class="orig">Uykuluk</div>
+            <p class="desc">Нежная телячья железа на гриле</p>
+          </div>
+        </article></div></section><section id="sec5"><h2><span class="ico">🔥</span> Гриль и мангал <span class="tr">IZGARALAR</span></h2><div class="grid">
+        <article class="card">
+          <div class="ph">
+            <img loading="lazy" src="https://image.pollinations.ai/prompt/adana%20kebab%20spicy%20minced%20meat%20skewer%20with%20rice?width=500&height=360&nologo=true&model=flux&seed=60" alt="Адана кебаб"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="fallback" style="display:none">🌶️</div>
+          </div>
+          <div class="body">
+            <div class="row"><h3>Адана кебаб</h3><span class="price">1100 ₺</span></div>
+            <div class="orig">Adana Kebap</div>
+            <p class="desc">Острый рубленый кебаб на шампуре</p>
+          </div>
+        </article>
+        <article class="card">
+          <div class="ph">
+            <img loading="lazy" src="https://image.pollinations.ai/prompt/urfa%20kebab%20minced%20meat%20skewer%20mild%20with%20rice?width=500&height=360&nologo=true&model=flux&seed=61" alt="Урфа кебаб"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="fallback" style="display:none">🥙</div>
+          </div>
+          <div class="body">
+            <div class="row"><h3>Урфа кебаб</h3><span class="price">1100 ₺</span></div>
+            <div class="orig">Urfa Kebap</div>
+            <p class="desc">Неострый рубленый кебаб на шампуре</p>
+          </div>
+        </article>
+        <article class="card">
+          <div class="ph">
+            <img loading="lazy" src="https://image.pollinations.ai/prompt/lamb%20shish%20kebab%20skewer%20grilled?width=500&height=360&nologo=true&model=flux&seed=62" alt="Шиш из баранины"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="fallback" style="display:none">🍢</div>
+          </div>
+          <div class="body">
+            <div class="row"><h3>Шиш из баранины</h3><span class="price">1150 ₺</span></div>
+            <div class="orig">Kuzu Şiş</div>
+            <p class="desc">Кусочки баранины на шампуре</p>
+          </div>
+        </article>
+        <article class="card">
+          <div class="ph">
+            <img loading="lazy" src="https://image.pollinations.ai/prompt/grilled%20kofte%20meatballs%20on%20plate?width=500&height=360&nologo=true&model=flux&seed=63" alt="Кёфте на гриле"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="fallback" style="display:none">🍢</div>
+          </div>
+          <div class="body">
+            <div class="row"><h3>Кёфте на гриле</h3><span class="price">900 ₺</span></div>
+            <div class="orig">Izgara Köfte</div>
+            <p class="desc">Сочные котлетки на мангале</p>
+          </div>
+        </article>
+        <article class="card">
+          <div class="ph">
+            <img loading="lazy" src="https://image.pollinations.ai/prompt/grilled%20liver%20skewers%20ciger%20sis?width=500&height=360&nologo=true&model=flux&seed=64" alt="Печень на шампуре"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="fallback" style="display:none">🍢</div>
+          </div>
+          <div class="body">
+            <div class="row"><h3>Печень на шампуре</h3><span class="price">1100 ₺</span></div>
+            <div class="orig">Ciğer Şiş</div>
+            <p class="desc">Кусочки печени на мангале</p>
+          </div>
+        </article>
+        <article class="card">
+          <div class="ph">
+            <img loading="lazy" src="https://image.pollinations.ai/prompt/grilled%20kokorec%20offal%20wrap%2C%20turkish?width=500&height=360&nologo=true&model=flux&seed=65" alt="Кокореч на гриле"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="fallback" style="display:none">🌭</div>
+          </div>
+          <div class="body">
+            <div class="row"><h3>Кокореч на гриле</h3><span class="price">1100 ₺</span></div>
+            <div class="orig">Izgara Kokoreç</div>
+            <p class="desc">Кокореч с зеленью и специями</p>
+          </div>
+        </article>
+        <article class="card">
+          <div class="ph">
+            <img loading="lazy" src="https://image.pollinations.ai/prompt/shashlik%20grilled%20meat%20skewer%20on%20charcoal?width=500&height=360&nologo=true&model=flux&seed=66" alt="Шашлык"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="fallback" style="display:none">🍢</div>
+          </div>
+          <div class="body">
+            <div class="row"><h3>Шашлык</h3><span class="price">1300 ₺</span></div>
+            <div class="orig">Şaşlık</div>
+            <p class="desc">Сочные кусочки мяса на углях</p>
+          </div>
+        </article>
+        <article class="card">
+          <div class="ph">
+            <img loading="lazy" src="https://image.pollinations.ai/prompt/grilled%20marinated%20chicken%20kulbasti?width=500&height=360&nologo=true&model=flux&seed=67" alt="Курица кюльбасты"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="fallback" style="display:none">🍗</div>
+          </div>
+          <div class="body">
+            <div class="row"><h3>Курица кюльбасты</h3><span class="price">750 ₺</span></div>
+            <div class="orig">Külbastı Tavuk</div>
+            <p class="desc">Маринованная курица на гриле</p>
+          </div>
+        </article>
+        <article class="card">
+          <div class="ph">
+            <img loading="lazy" src="https://image.pollinations.ai/prompt/grilled%20vegetables%20platter%2C%20vegan?width=500&height=360&nologo=true&model=flux&seed=68" alt="Овощи на гриле"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="fallback" style="display:none">🥗</div>
+          </div>
+          <div class="body">
+            <div class="row"><h3>Овощи на гриле</h3><span class="price">540 ₺</span></div>
+            <div class="orig">Vegan Izgara</div>
+            <p class="desc">Сезонные овощи на мангале</p>
+          </div>
+        </article>
+        <article class="card">
+          <div class="ph">
+            <img loading="lazy" src="https://image.pollinations.ai/prompt/grilled%20jumbo%20prawns%20on%20charcoal?width=500&height=360&nologo=true&model=flux&seed=69" alt="Креветки джамбо гриль"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="fallback" style="display:none">🦐</div>
+          </div>
+          <div class="body">
+            <div class="row"><h3>Креветки джамбо гриль</h3><span class="price">1100 ₺</span></div>
+            <div class="orig">Jumbo Karides Izgara</div>
+            <p class="desc">Крупные креветки на углях</p>
+          </div>
+        </article></div></section><section id="sec6"><h2><span class="ico">🥗</span> Салаты <span class="tr">SALATALAR</span></h2><div class="grid">
+        <article class="card">
+          <div class="ph">
+            <img loading="lazy" src="https://image.pollinations.ai/prompt/arugula%20rocket%20salad%20with%20parmesan%20lemon?width=500&height=360&nologo=true&model=flux&seed=70" alt="Салат с рукколой"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="fallback" style="display:none">🥬</div>
+          </div>
+          <div class="body">
+            <div class="row"><h3>Салат с рукколой</h3><span class="price">460 ₺</span></div>
+            <div class="orig">Roka Salatası</div>
+            <p class="desc">Руккола с пармезаном и лимоном</p>
+          </div>
+        </article>
+        <article class="card">
+          <div class="ph">
+            <img loading="lazy" src="https://image.pollinations.ai/prompt/fresh%20green%20garden%20salad?width=500&height=360&nologo=true&model=flux&seed=71" alt="Зелёный салат"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="fallback" style="display:none">🥗</div>
+          </div>
+          <div class="body">
+            <div class="row"><h3>Зелёный салат</h3><span class="price">410 ₺</span></div>
+            <div class="orig">Yeşil Salata</div>
+            <p class="desc">Микс свежей зелени</p>
+          </div>
+        </article>
+        <article class="card">
+          <div class="ph">
+            <img loading="lazy" src="https://image.pollinations.ai/prompt/istanbul%20mixed%20vegetable%20salad?width=500&height=360&nologo=true&model=flux&seed=72" alt="Салат Стамбул"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="fallback" style="display:none">🥗</div>
+          </div>
+          <div class="body">
+            <div class="row"><h3>Салат Стамбул</h3><span class="price">410 ₺</span></div>
+            <div class="orig">İstanbul Salata</div>
+            <p class="desc">Овощной салат по-стамбульски</p>
+          </div>
+        </article>
+        <article class="card">
+          <div class="ph">
+            <img loading="lazy" src="https://image.pollinations.ai/prompt/seasonal%20vegetable%20salad%20bowl?width=500&height=360&nologo=true&model=flux&seed=73" alt="Сезонный салат"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="fallback" style="display:none">🥗</div>
+          </div>
+          <div class="body">
+            <div class="row"><h3>Сезонный салат</h3><span class="price">420 ₺</span></div>
+            <div class="orig">Mevsim Salata</div>
+            <p class="desc">Салат из сезонных овощей</p>
+          </div>
+        </article>
+        <article class="card">
+          <div class="ph">
+            <img loading="lazy" src="https://image.pollinations.ai/prompt/greek%20salad%20with%20feta%20olives?width=500&height=360&nologo=true&model=flux&seed=74" alt="Греческий салат"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="fallback" style="display:none">🧀</div>
+          </div>
+          <div class="body">
+            <div class="row"><h3>Греческий салат</h3><span class="price">410 ₺</span></div>
+            <div class="orig">Greek Salata</div>
+            <p class="desc">Овощи с сыром фета и оливками</p>
+          </div>
+        </article>
+        <article class="card">
+          <div class="ph">
+            <img loading="lazy" src="https://image.pollinations.ai/prompt/gavurdagi%20salad%20tomato%20pepper%20walnut%2C%20turkish?width=500&height=360&nologo=true&model=flux&seed=75" alt="Гавурдагы салат"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="fallback" style="display:none">🍅</div>
+          </div>
+          <div class="body">
+            <div class="row"><h3>Гавурдагы салат</h3><span class="price">460 ₺</span></div>
+            <div class="orig">Gavurdağı Salatası</div>
+            <p class="desc">Томаты, перец и грецкий орех</p>
+          </div>
+        </article>
+        <article class="card">
+          <div class="ph">
+            <img loading="lazy" src="https://image.pollinations.ai/prompt/dakos%20cretan%20salad%20with%20rusks%20tomato%20feta?width=500&height=360&nologo=true&model=flux&seed=76" alt="Салат дакос"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="fallback" style="display:none">🥗</div>
+          </div>
+          <div class="body">
+            <div class="row"><h3>Салат дакос</h3><span class="price">420 ₺</span></div>
+            <div class="orig">Dakos Salata</div>
+            <p class="desc">Критский салат с сухариками и фетой</p>
+          </div>
+        </article></div></section><section id="sec7"><h2><span class="ico">🍮</span> Десерты <span class="tr">TATLILAR</span></h2><div class="grid">
+        <article class="card">
+          <div class="ph">
+            <img loading="lazy" src="https://image.pollinations.ai/prompt/baked%20semolina%20halva%20with%20walnuts%2C%20turkish%20dessert?width=500&height=360&nologo=true&model=flux&seed=77" alt="Печёная халва с орехами"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="fallback" style="display:none">🍮</div>
+          </div>
+          <div class="body">
+            <div class="row"><h3>Печёная халва с орехами</h3><span class="price">360 ₺</span></div>
+            <div class="orig">Cevizli Fırın Helva</div>
+            <p class="desc">Тёплая халва с грецким орехом</p>
+          </div>
+        </article>
+        <article class="card">
+          <div class="ph">
+            <img loading="lazy" src="https://image.pollinations.ai/prompt/cretan%20dessert%20with%20syrup%20and%20nuts?width=500&height=360&nologo=true&model=flux&seed=78" alt="Критский десерт"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="fallback" style="display:none">🍯</div>
+          </div>
+          <div class="body">
+            <div class="row"><h3>Критский десерт</h3><span class="price">360 ₺</span></div>
+            <div class="orig">Girit Tatlısı</div>
+            <p class="desc">Сладость по-критски</p>
+          </div>
+        </article>
+        <article class="card">
+          <div class="ph">
+            <img loading="lazy" src="https://image.pollinations.ai/prompt/fresh%20fruit%20platter%20assortment%20for%20two?width=500&height=360&nologo=true&model=flux&seed=79" alt="Фруктовая тарелка (2 чел.)"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="fallback" style="display:none">🍉</div>
+          </div>
+          <div class="body">
+            <div class="row"><h3>Фруктовая тарелка (2 чел.)</h3><span class="price">360 ₺</span></div>
+            <div class="orig">Meyve Tabağı (на 2 персоны)</div>
+            <p class="desc">Ассорти свежих фруктов</p>
+          </div>
+        </article>
+        <article class="card">
+          <div class="ph">
+            <img loading="lazy" src="https://image.pollinations.ai/prompt/large%20fresh%20fruit%20platter%20assortment?width=500&height=360&nologo=true&model=flux&seed=80" alt="Фруктовая тарелка (4 чел.)"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="fallback" style="display:none">🍉</div>
+          </div>
+          <div class="body">
+            <div class="row"><h3>Фруктовая тарелка (4 чел.)</h3><span class="price">480 ₺</span></div>
+            <div class="orig">Meyve Tabağı (на 4 персоны)</div>
+            <p class="desc">Большое ассорти фруктов</p>
+          </div>
+        </article>
+        <article class="card">
+          <div class="ph">
+            <img loading="lazy" src="https://image.pollinations.ai/prompt/dessert%20crepe%20with%20chocolate%20and%20fruit?width=500&height=360&nologo=true&model=flux&seed=81" alt="Блинчик «Рахат»"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="fallback" style="display:none">🥞</div>
+          </div>
+          <div class="body">
+            <div class="row"><h3>Блинчик «Рахат»</h3><span class="price">240 ₺</span></div>
+            <div class="orig">Rahat Krep Krepowiç</div>
+            <p class="desc">Фирменный десертный блинчик</p>
+          </div>
+        </article></div></section>
+</main>
+<footer>
+  Цены указаны в турецких лирах (₺) и могут отличаться от актуальных. ·
+  Изображения блюд иллюстративны (генерируются автоматически).
+</footer>
+</body>
+</html>
